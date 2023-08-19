@@ -1,10 +1,14 @@
 ORG 0x7c00
+
+[SECTION .data]
+LOADER_ADDR equ 0x500
+LOADER_SECTOR_START equ 0x01
+LOADER_SECTOR_NUM equ 0x04
+
 [SECTION .text]
 [BITS 16]
-
 global _start
 _start:
-
     ; -----------------------------------------------------
     ; 初始化段寄存器
     ; -----------------------------------------------------
@@ -46,10 +50,114 @@ _start:
     mov ax, 3
     int 0x10
 
-    mov si, msg
-    call print
+    ; 将loader从硬盘读入内存
+    mov di, LOADER_ADDR
+    mov ebx, LOADER_SECTOR_START
+    mov cl, LOADER_SECTOR_NUM
+    call read_hd
 
-    jmp $
+    ; 跳转到loader
+    mov     si, msg
+    call    print
+    xchg bx, bx ; 跳转前下断
+    jmp     LOADER_ADDR
+
+; -----------------------------------------------------
+; 读取硬盘n个扇区，装载到指定内存中
+; -----------------------------------------------------
+; di => 将数据写入的内存地址
+; ebx => LBA起始扇区号
+; cl => 读入的扇区数
+; -----------------------------------------------------
+read_hd:
+    ; -----------------------------------------------------
+    ; 硬盘控制器主要端口寄存器说明：
+    ;   ---------------------------------------------
+    ;   | IO端口Primary通道 | 读端口用途    | 写端口用途 |
+    ;   | 0x1F0            |          Data          |
+    ;   | 0x1F1            |  Error      | Features |
+    ;   | 0x1F2            |      Sector count      |
+    ;   | 0x1F3            |      LBA low (0~7)     |
+    ;   | 0x1F4            |      LBA mid (8~15)    |
+    ;   | 0x1F5            |      LBA high (16~23)  |
+    ;   | 0x1F6            |         Device         |
+    ;   | 0x1F7            |  Status     | Command  |
+    ;   ---------------------------------------------
+    ; 端口写指令：
+    ;   out dx, ax/al ; dx为端口，写到端口的数据用ax/al存放
+    ; 端口读指令：
+    ;   in ax/al, dx ; dx为端口，ax/al用来存储读出的数据
+    ; 说明：
+    ;   Data寄存器宽度16位，其他均为8位，使用ax还是al取决于端口位宽
+    ; -----------------------------------------------------
+    ; Device寄存器结构：
+    ;   -------------------------------------------------
+    ;   |  7  |  6  |  5  |  4  |  3  |  2  |  1  |  0  |
+    ;   |  1  | MOD |  1  | DEV |    LBA地址的24~27位    |
+    ;   -------------------------------------------------
+    ; MOD:
+    ;   寻址模式，0-CHS，1-LBA
+    ; DEV:
+    ;   选择磁盘，0-主盘（master），1-从盘（slave）
+    ; -----------------------------------------------------
+    ; Command = 0x20 为读盘命令，Command命令执行前其他参数应设置完毕
+    ; -----------------------------------------------------
+
+    ; 设置要读取的扇区数
+    mov dx, 0x1f2
+    mov al, cl
+    out dx, al
+
+    ; 设置LBA低8位
+    mov eax, ebx
+    inc dx
+    out dx, al
+
+    ; 设置LBA中8位
+    shr eax, 8
+    inc dx
+    out dx, al
+
+    ; 设置LBA高8位
+    shr eax, 8
+    inc dx
+    out dx, al
+
+    ; 设置LBA顶4位，及读盘模式
+    shr eax, 8
+    and al, 0x0f ; al高四位置0，al低四位为LBA第24~27位
+    or al, 0xe0 ; al高四位设置为1110，表示LBA模式读取主盘
+    inc dx
+    out dx, al
+
+    ; 发送读盘命令
+    inc dx ; 0x1F7
+    mov al, 0x20
+    out dx, al
+
+    ; 检测硬盘状态
+.check:
+    nop ; 每次询问暂停一条指令的时间
+    in al, dx ; 0x1f7端口，读硬盘状态
+    and al, 0x88 ; 第4位为1表示已准备好数据，第7位为1表示硬盘忙
+    cmp al, 0x08 ; 判断是否准备好数据
+    jnz .check ; 没准备好继续循环
+
+    ; 准备就绪，计算读数据次数
+    mov ah, 0
+    mov al, cl
+    mov dx, 256
+    mul dx ; 一个扇区512字节，每次读一个字(2字节)：次数=扇区数*512/2=扇区数*256
+    mov cx, ax
+
+    ; 开始读盘
+    mov dx, 0x1f0
+.read:
+    in ax, dx
+    mov [di], ax ; 装载到指定内存区域
+    add di, 2
+    loop .read
+    ret
 
 ; ------------------------
 ; 打印字符串
@@ -65,7 +173,7 @@ print:
     ;   AH => 功能号
     ;   AL => 字符
     ;   BH => 页码
-    ;   BL => 前景色
+    ;   BL => 颜色（只适用于图形模式）
     ; -----------------------------------------------------
     ; 输出：
     ;   无
@@ -82,7 +190,7 @@ print:
 .done:
     ret
 
-msg db "Hello MBR!", 10, 13, 0
+msg db "ready jump to loader...", 10, 13, 0
 
 TIMES 510-($-$$) DB 0
 DW 0xAA55

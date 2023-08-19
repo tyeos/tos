@@ -1,13 +1,15 @@
 BUILD := ./build
 KERNEL_PATH := ./kernel
 
-MBR_ASM := "mbr.asm"
-MBR_O := "mbr.o"
-HD_IMG := "hd.img"
+MBR_O := mbr.o
+LOADER_O := loader.o
 
-mbr:
+HD_IMG := hd.img
+
+asm: ${BUILD}/${MBR_O} ${BUILD}/${LOADER_O}
+${BUILD}/%.o: ${KERNEL_PATH}/%.asm
 	$(shell mkdir -p ${BUILD})
-	nasm ${KERNEL_PATH}/${MBR_ASM} -o ${BUILD}/${MBR_O}
+	nasm $< -o $@
 
 img:
 	$(shell rm -f ${BUILD}/${HD_IMG})
@@ -15,10 +17,11 @@ img:
 	bximage -q -hd=16 -func=create -sectsize=512 -imgmode=flat ${BUILD}/${HD_IMG}
 	# MBR装在0盘0道1扇区
 	dd if=${BUILD}/${MBR_O} of=${BUILD}/${HD_IMG} bs=512 seek=0 count=1 conv=notrunc
+	# 给loader分配4个扇区
+	dd if=${BUILD}/${LOADER_O} of=${BUILD}/${HD_IMG} bs=512 seek=1 count=4 conv=notrunc
 
 bochs:
 	bochs -q -f bochsrc
-
 
 clean:
 	$(shell rm -rf ${BUILD})
