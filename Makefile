@@ -13,6 +13,7 @@ $(BUILD)/%.o: $(KERNEL_PATH)/%.asm
 build: mkdir $(BUILD_O_FILES)
 
 install:
+	$(shell rm -f $(BUILD_HD_IMG))
 	# 创建硬盘镜像文件，-hd指定镜像大小，单位M
 	bximage -q -hd=16 -func=create -sectsize=512 -imgmode=flat $(BUILD_HD_IMG)
 	# MBR装在0盘0道1扇区
