@@ -116,7 +116,7 @@ DESC_G_4k equ 1<<23
 DESC_D_32 equ 1<<22
 DESC_L    equ 0<<21
 DESC_AVL  equ 0<<20
-; 定义三种类型的LIMIT（段界限的第二段，16~19位）
+; 定义四种类型的LIMIT（段界限的第二段，16~19位）
 DESC_LIMIT_2_CODE   equ 0xF << 16
 DESC_LIMIT_2_DATA   equ 0xF << 16
 DESC_LIMIT_2_STACK  equ 0xF << 16
@@ -130,20 +130,21 @@ DESC_DPL_2 equ 10b<<13
 DESC_DPL_3 equ 11b<<13
 
 DESC_S_NOT_SYS equ 1<<12
-; 定义三种类型的TYPE（SCREEN按DATA处理）
-DESC_TYPE_CODE  equ 1000b<<8 ; X=1, R=0, C=0, A=0，代码段可执行，非一致性，不可读，访问位清零
-DESC_TYPE_DATA  equ 0010b<<8 ; X=0, R=0, C=1, A=0，数据段不可执行，向上扩展，可写，访问位清零
-DESC_TYPE_STACK equ 0110b<<8 ; X=0, R=1, C=1, A=0，栈段不可执行，向下扩展，可写，访问位清零
+; 定义四种类型的TYPE（SCREEN按DATA处理）
+DESC_TYPE_CODE   equ 1000b<<8 ; X=1, R=0, C=0, A=0，代码段可执行，非一致性，不可读，访问位清零
+DESC_TYPE_DATA   equ 0010b<<8 ; X=0, R=0, C=1, A=0，数据段不可执行，向上扩展，可写，访问位清零
+DESC_TYPE_STACK  equ 0110b<<8 ; X=0, R=1, C=1, A=0，栈段不可执行，向下扩展，可写，访问位清零
+DESC_TYPE_SCREEN equ DESC_TYPE_DATA ; 和数据段保持一致
 
 ; ------------------------------------------------------------------------------------------------------
 ; 整合四种类型的高四字节和低四字节
 ; 屏幕段基址为0xb8000, 其他段基址为0
 ; 屏幕段界限为0x7fff>>12, 其他段界限为4G>>12
 ; ------------------------------------------------------------------------------------------------------
-DESC_CODE_HIGH4   equ (0x00<<24) + DESC_G_4k + DESC_D_32 + DESC_L + DESC_AVL + DESC_LIMIT_2_CODE   + DESC_P + DESC_DPL_0 + DESC_S_NOT_SYS + DESC_TYPE_CODE  + 0x00
-DESC_DATA_HIGH4   equ (0x00<<24) + DESC_G_4k + DESC_D_32 + DESC_L + DESC_AVL + DESC_LIMIT_2_DATA   + DESC_P + DESC_DPL_0 + DESC_S_NOT_SYS + DESC_TYPE_DATA  + 0x00
-DESC_STACK_HIGH4  equ (0x00<<24) + DESC_G_4k + DESC_D_32 + DESC_L + DESC_AVL + DESC_LIMIT_2_STACK  + DESC_P + DESC_DPL_0 + DESC_S_NOT_SYS + DESC_TYPE_STACK + 0x00
-DESC_SCREEN_HIGH4 equ (0x00<<24) + DESC_G_4k + DESC_D_32 + DESC_L + DESC_AVL + DESC_LIMIT_2_SCREEN + DESC_P + DESC_DPL_0 + DESC_S_NOT_SYS + DESC_TYPE_DATA  + 0x0B
+DESC_CODE_HIGH4   equ (0x00<<24) + DESC_G_4k + DESC_D_32 + DESC_L + DESC_AVL + DESC_LIMIT_2_CODE   + DESC_P + DESC_DPL_0 + DESC_S_NOT_SYS + DESC_TYPE_CODE   + 0x00
+DESC_DATA_HIGH4   equ (0x00<<24) + DESC_G_4k + DESC_D_32 + DESC_L + DESC_AVL + DESC_LIMIT_2_DATA   + DESC_P + DESC_DPL_0 + DESC_S_NOT_SYS + DESC_TYPE_DATA   + 0x00
+DESC_STACK_HIGH4  equ (0x00<<24) + DESC_G_4k + DESC_D_32 + DESC_L + DESC_AVL + DESC_LIMIT_2_STACK  + DESC_P + DESC_DPL_0 + DESC_S_NOT_SYS + DESC_TYPE_STACK  + 0x00
+DESC_SCREEN_HIGH4 equ (0x00<<24) + DESC_G_4k + DESC_D_32 + DESC_L + DESC_AVL + DESC_LIMIT_2_SCREEN + DESC_P + DESC_DPL_0 + DESC_S_NOT_SYS + DESC_TYPE_SCREEN + 0x0B
 
 DESC_CODE_LOW4   equ 0x0000FFFF
 DESC_DATA_LOW4   equ 0x0000FFFF
@@ -159,10 +160,13 @@ GDT_BASE: ; index=0, 第0个描述符为空描述符
 GDT_CODE: ; index=1, 定义代码 段描述符
     dd DESC_CODE_LOW4
     dd DESC_CODE_HIGH4
-GDT_STACK: ; index=2, 定义栈 段描述符
-    dd DESC_STACK_LOW4
+GDT_DATA: ; index=2, 定义数据 段描述符
+    dd DESC_DATA_LOW4
     dd DESC_DATA_HIGH4
-GDT_SCREEN: ; index=3, 定义屏幕 段描述符
+GDT_STACK: ; index=3, 定义栈 段描述符
+    dd DESC_STACK_LOW4
+    dd DESC_STACK_HIGH4
+GDT_SCREEN: ; index=4, 定义屏幕 段描述符
     dd DESC_SCREEN_LOW4
     dd DESC_SCREEN_HIGH4
 GDT_RESERVED:
@@ -201,7 +205,7 @@ gdt_ptr:
 ;     虽然可以往DS、ES、FS、GS寄存器中加载值为0的选择子，但真正在使用时CPU将会抛出异常，毕竟第0个段描述符是哑的，不可用。
 ;     如果索引值超出描述符表（是GDT还是LDT由TI位决定）定义的界限值也会抛出异常。
 ; ------------------------------------------------------------------------------------------------------
-[SECTION .sector]
+[SECTION .selector]
 
 ; 定义四种特权级
 RPL_0 equ 00b
@@ -212,14 +216,20 @@ RPL_3 equ 11b
 TI_GDT equ 000b
 TI_LDT equ 100b
 
-; ------------------------------------------------------------------------------------------------------
+; --------------------------------------------
 ; ---------------   定义选择子   ---------------
-; ------------------------------------------------------------------------------------------------------
-SELECTOR_CODE   equ 0x1<<3 + TI_GDT + RPL_0 ; GDT表中index=1的位置
-SELECTOR_DATA   equ 0x2<<3 + TI_GDT + RPL_0 ; GDT表中index=2的位置
-SELECTOR_SCREEN equ 0x3<<3 + TI_GDT + RPL_0 ; GDT表中index=3的位置
+; --------------------------------------------
+SELECTOR_CODE   equ 1<<3 + TI_GDT + RPL_0
+SELECTOR_DATA   equ 2<<3 + TI_GDT + RPL_0
+SELECTOR_STACK  equ 3<<3 + TI_GDT + RPL_0
+SELECTOR_SCREEN equ 4<<3 + TI_GDT + RPL_0
+
 
 [SECTION .data]
+TOC_ADDR equ 0x1500
+TOC_SECTOR_START equ 5
+TOC_SECTOR_NUM equ 60
+
 msg:
     db "breaking through 512 bytes!", 10, 13, 0
 
@@ -300,15 +310,128 @@ print:
 ; ------------------------------------------------------------------------------------------------------
 [bits 32]
 protected_model_start:
-    xchg bx, bx ; 进入保护模式后下段
     mov ax, SELECTOR_DATA
     mov ds, ax
     mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ax, SELECTOR_STACK
     mov ss, ax
     mov esp, 0x9fbff
-    ; 输出字符到屏幕
-    mov ax, SELECTOR_SCREEN
-    mov gs, ax
-    mov byte [gs:160*2], 'P' ; 在屏幕第三行首个位置输出P
 
-    jmp $
+    ; 将内核入口程序读入内存
+    mov edi, TOC_ADDR
+    mov ecx, TOC_SECTOR_START
+    mov bl, TOC_SECTOR_NUM
+    call read_hd
+
+    jmp dword SELECTOR_CODE:TOC_ADDR
+
+; -----------------------------------------------------
+; 读取硬盘n个扇区，装载到指定内存中
+; -----------------------------------------------------
+; edi => 将数据写入的内存地址
+; ebx => LBA起始扇区号
+; cl => 读入的扇区数
+; -----------------------------------------------------
+read_hd:
+    ; -----------------------------------------------------
+    ; 硬盘控制器主要端口寄存器说明：
+    ;   ---------------------------------------------
+    ;   | IO端口Primary通道 | 读端口用途    | 写端口用途 |
+    ;   | 0x1F0            |          Data          |
+    ;   | 0x1F1            |  Error      | Features |
+    ;   | 0x1F2            |      Sector count      |
+    ;   | 0x1F3            |      LBA low (0~7)     |
+    ;   | 0x1F4            |      LBA mid (8~15)    |
+    ;   | 0x1F5            |      LBA high (16~23)  |
+    ;   | 0x1F6            |         Device         |
+    ;   | 0x1F7            |  Status     | Command  |
+    ;   ---------------------------------------------
+    ; 端口写指令：
+    ;   out dx, ax/al ; dx为端口，写到端口的数据用ax/al存放
+    ; 端口读指令：
+    ;   in ax/al, dx ; dx为端口，ax/al用来存储读出的数据
+    ; 说明：
+    ;   Data寄存器宽度16位，其他均为8位，使用ax还是al取决于端口位宽
+    ; -----------------------------------------------------
+    ; Device寄存器结构：
+    ;   -------------------------------------------------
+    ;   |  7  |  6  |  5  |  4  |  3  |  2  |  1  |  0  |
+    ;   |  1  | MOD |  1  | DEV |    LBA地址的24~27位    |
+    ;   -------------------------------------------------
+    ; MOD:
+    ;   寻址模式，0-CHS，1-LBA
+    ; DEV:
+    ;   选择磁盘，0-主盘（master），1-从盘（slave）
+    ; -----------------------------------------------------
+    ; Command = 0x20 为读盘命令，Command命令执行前其他参数应设置完毕
+    ; -----------------------------------------------------
+
+    ; 设置要读取的扇区数
+    mov dx, 0x1f2
+    mov al, bl
+    out dx, al
+
+    ; 设置LBA低8位
+    mov eax, ecx
+    inc dx
+    out dx, al
+
+    ; 设置LBA中8位
+    shr eax, 8
+    inc dx
+    out dx, al
+
+    ; 设置LBA高8位
+    shr eax, 8
+    inc dx
+    out dx, al
+
+    ; 设置LBA顶4位，及读盘模式
+    shr eax, 8
+    and al, 0x0f ; al高四位置0，al低四位为LBA第24~27位
+    or al, 0xe0 ; al高四位设置为1110，表示LBA模式读取主盘
+    inc dx
+    out dx, al
+
+    ; 发送读盘命令
+    inc dx ; 0x1F7
+    mov al, 0x20
+    out dx, al
+
+    ; -----------------------------------------------------
+    ; 检测硬盘状态
+    ; -----------------------------------------------------
+    ;   -------------------------------------------------
+    ;   |  7  |  6  |  5  |  4  |  3  |  2  |  1  |  0  |
+    ;   | BSY | RDY | WFT | SKC | DRQ | COR | IDX | ERR |
+    ;   -------------------------------------------------
+    ; BSY：硬盘是否繁忙
+    ; DRQ：是否正在等待写入数据或等待读出数据
+    ; RDY：控制器是否已准备好接收命令
+    ; WFT：是否存在写故障
+    ; ERR：是否有错误发生
+    ; -----------------------------------------------------
+    ; 注：一次检测只保证一个扇区
+    ; -----------------------------------------------------
+.check:
+    mov dx, 0x1f7
+    in al, dx ; 读硬盘状态
+    and al, 0x88 ; 第3位为1表示已准备好数据，第7位为1表示硬盘忙
+    cmp al, 0x08 ; 判断是否准备好数据
+    jnz .check ; 没准备好继续循环
+
+    ; 准备就绪，开始读盘
+    mov dx, 0x1f0
+    mov ecx, 256 ; 一个扇区512字节，每次读一个字(2字节)
+.read:
+    in ax, dx
+    mov [edi], ax ; 装载到指定内存区域
+    add edi, 2
+    loop .read
+
+    ; 一个扇区读取完成，准备检测下一个扇区
+    dec bl
+    ja .check ; bl大于0则继续检测
+    ret

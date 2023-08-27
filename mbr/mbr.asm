@@ -2,8 +2,8 @@ ORG 0x7c00
 
 [SECTION .data]
 LOADER_ADDR equ 0x500
-LOADER_SECTOR_START equ 0x01
-LOADER_SECTOR_NUM equ 0x04
+LOADER_SECTOR_START equ 1
+LOADER_SECTOR_NUM equ 4
 
 [SECTION .text]
 [BITS 16]
@@ -52,15 +52,14 @@ _start:
 
     ; 将loader从硬盘读入内存
     mov di, LOADER_ADDR
-    mov ebx, LOADER_SECTOR_START
-    mov cl, LOADER_SECTOR_NUM
+    mov ecx, LOADER_SECTOR_START
+    mov bl, LOADER_SECTOR_NUM
     call read_hd
 
     ; 跳转到loader
-    mov     si, msg
-    call    print
-    xchg bx, bx ; 跳转前下断
-    jmp     LOADER_ADDR
+    mov si, msg
+    call print
+    jmp LOADER_ADDR
 
 ; -----------------------------------------------------
 ; 读取硬盘n个扇区，装载到指定内存中
@@ -105,11 +104,11 @@ read_hd:
 
     ; 设置要读取的扇区数
     mov dx, 0x1f2
-    mov al, cl
+    mov al, bl
     out dx, al
 
     ; 设置LBA低8位
-    mov eax, ebx
+    mov eax, ecx
     inc dx
     out dx, al
 
@@ -148,27 +147,27 @@ read_hd:
     ; WFT：是否存在写故障
     ; ERR：是否有错误发生
     ; -----------------------------------------------------
+    ; 注：一次检测只保证一个扇区
+    ; -----------------------------------------------------
 .check:
-    nop ; 每次询问暂停一条指令的时间
-    in al, dx ; 0x1f7端口，读硬盘状态
+    mov dx, 0x1f7
+    in al, dx ; 读硬盘状态
     and al, 0x88 ; 第3位为1表示已准备好数据，第7位为1表示硬盘忙
     cmp al, 0x08 ; 判断是否准备好数据
     jnz .check ; 没准备好继续循环
 
-    ; 准备就绪，计算读数据次数
-    mov ah, 0
-    mov al, cl
-    mov dx, 256
-    mul dx ; 一个扇区512字节，每次读一个字(2字节)：次数=扇区数*512/2=扇区数*256
-    mov cx, ax
-
-    ; 开始读盘
+    ; 准备就绪，开始读盘
     mov dx, 0x1f0
+    mov cx, 256 ; 一个扇区512字节，每次读一个字(2字节)
 .read:
     in ax, dx
     mov [di], ax ; 装载到指定内存区域
     add di, 2
     loop .read
+
+    ; 一个扇区读取完成，准备检测下一个扇区
+    dec bl
+    ja .check ; bl大于0则继续检测
     ret
 
 ; ------------------------
