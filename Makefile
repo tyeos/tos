@@ -6,7 +6,7 @@ KERNEL_PATH := kernel
 
 BUILD_MBR_O_FILES := $(BUILD)/$(MBR_PATH)/mbr.o $(BUILD)/$(MBR_PATH)/loader.o
 BUILD_BRIDGE_O_FILES := $(BUILD)/$(BRIDGE_PATH)/toc.o $(BUILD)/$(BRIDGE_PATH)/io.o
-BUILD_KERNEL_O_FILES := $(BUILD)/$(KERNEL_PATH)/main.o
+BUILD_KERNEL_O_FILES := $(BUILD)/$(KERNEL_PATH)/main.o $(BUILD)/$(KERNEL_PATH)/console.o $(BUILD)/$(KERNEL_PATH)/string.o
 
 BUILD_KERNEL_ELF := $(BUILD)/kernel.elf
 BUILD_KERNEL_BIN := $(BUILD)/kernel.bin
@@ -34,7 +34,7 @@ mkdir:
 	$(shell mkdir -p $(BUILD)/$(BRIDGE_PATH))
 	$(shell mkdir -p $(BUILD)/$(KERNEL_PATH))
 
-$(BUILD)/$(KERNEL_PATH)/main.o: $(KERNEL_PATH)/main.c
+$(BUILD)/$(KERNEL_PATH)/%.o: $(KERNEL_PATH)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@
 
 $(BUILD)/$(BRIDGE_PATH)/%.o: $(BRIDGE_PATH)/%.asm
