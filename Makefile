@@ -1,12 +1,19 @@
 BUILD := ./build
-MBR_PATH := ./mbr
-KERNEL_PATH := ./kernel
 
-BUILD_MBR_O_FILES := $(BUILD)/mbr.o $(BUILD)/loader.o $(BUILD)/toc.o
+MBR_PATH := mbr
+BRIDGE_PATH := bridge
+KERNEL_PATH := kernel
+
+BUILD_MBR_O_FILES := $(BUILD)/$(MBR_PATH)/mbr.o $(BUILD)/$(MBR_PATH)/loader.o
+BUILD_BRIDGE_O_FILES := $(BUILD)/$(BRIDGE_PATH)/toc.o $(BUILD)/$(BRIDGE_PATH)/io.o
+BUILD_KERNEL_O_FILES := $(BUILD)/$(KERNEL_PATH)/main.o
+
 BUILD_KERNEL_ELF := $(BUILD)/kernel.elf
 BUILD_KERNEL_BIN := $(BUILD)/kernel.bin
 BUILD_KERNEL_MAP := $(BUILD)/kernel.map
+
 BUILD_HD_IMG := $(BUILD)/hd.img
+
 
 # 由于自己写的内核很多东西都没有，比如标准库的打印函数，这里把相关内容都屏蔽掉
 CFLAGS := -m32 					# 32位程序
@@ -23,23 +30,28 @@ CFLAGS := $(strip $(CFLAGS))
 DEBUG := -g
 
 mkdir:
-	$(shell mkdir -p $(BUILD))
+	$(shell mkdir -p $(BUILD)/$(MBR_PATH))
+	$(shell mkdir -p $(BUILD)/$(BRIDGE_PATH))
+	$(shell mkdir -p $(BUILD)/$(KERNEL_PATH))
 
-$(BUILD)/main.o: $(KERNEL_PATH)/main.c
+$(BUILD)/$(KERNEL_PATH)/main.o: $(KERNEL_PATH)/main.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@
 
-$(BUILD)/toc.o: $(MBR_PATH)/toc.asm
+$(BUILD)/$(BRIDGE_PATH)/%.o: $(BRIDGE_PATH)/%.asm
 	# 运行在linux下，所以采用elf格式，加-g可生成调试符号，要和C程序一起打包
 	nasm -f elf32 $(DEBUG) $< -o $@
 
-$(BUILD)/%.o: $(MBR_PATH)/%.asm
+$(BUILD)/$(MBR_PATH)/%.o: $(MBR_PATH)/%.asm
 	nasm $< -o $@
 
-kernel: $(BUILD)/toc.o $(BUILD)/main.o
+
+kernel: $(BUILD_BRIDGE_O_FILES) $(BUILD_KERNEL_O_FILES)
 	$(shell rm -f $(BUILD_KERNEL_ELF) $(BUILD_KERNEL_MAP) $(BUILD_KERNEL_BIN))
 	# 生成的elf文件可用于linux下的调试
 	# 注：在CLion中添加RemoteDebug时，Symbol file 填写该生成文件的路径
 	ld -m elf_i386 $^ -o $(BUILD_KERNEL_ELF) -Ttext 0x1500
+	# 查看代码段
+	readelf -S $(BUILD_KERNEL_ELF) -W
 	# 导出符号地址
 	nm $(BUILD_KERNEL_ELF) | sort > $(BUILD_KERNEL_MAP)
 	# 生成二进制文件，用于打包到镜像中

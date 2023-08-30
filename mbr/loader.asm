@@ -325,7 +325,7 @@ protected_model_start:
     mov bl, TOC_SECTOR_NUM
     call read_hd
 
-    jmp dword SELECTOR_CODE:TOC_ADDR
+    jmp SELECTOR_CODE:TOC_ADDR
 
 ; -----------------------------------------------------
 ; 读取硬盘n个扇区，装载到指定内存中
