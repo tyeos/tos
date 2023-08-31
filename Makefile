@@ -6,7 +6,8 @@ KERNEL_PATH := kernel
 
 BUILD_MBR_O_FILES := $(BUILD)/$(MBR_PATH)/mbr.o $(BUILD)/$(MBR_PATH)/loader.o
 BUILD_BRIDGE_O_FILES := $(BUILD)/$(BRIDGE_PATH)/toc.o $(BUILD)/$(BRIDGE_PATH)/io.o
-BUILD_KERNEL_O_FILES := $(BUILD)/$(KERNEL_PATH)/main.o $(BUILD)/$(KERNEL_PATH)/console.o $(BUILD)/$(KERNEL_PATH)/string.o
+BUILD_KERNEL_O_FILES := $(BUILD)/$(KERNEL_PATH)/main.o $(BUILD)/$(KERNEL_PATH)/console.o $(BUILD)/$(KERNEL_PATH)/string.o \
+	$(BUILD)/$(KERNEL_PATH)/vsprintf.o $(BUILD)/$(KERNEL_PATH)/printk.o
 
 BUILD_KERNEL_ELF := $(BUILD)/kernel.elf
 BUILD_KERNEL_BIN := $(BUILD)/kernel.bin
