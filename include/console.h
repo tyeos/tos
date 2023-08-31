@@ -10,4 +10,7 @@
 void console_clear(void);
 void console_write(char *buf, uint32 count);
 
+void scroll_to_top();
+void scroll_to_cursor();
+
 #endif //TOS_CONSOLE_H

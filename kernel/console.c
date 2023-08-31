@@ -65,8 +65,8 @@
 #define CRT_CURSOR_H 0xE   // 光标位置 - 高位
 #define CRT_CURSOR_L 0xF   // 光标位置 - 低位
 
-#define MEM_BASE 0xB8000              // 显卡内存起始位置
-#define MEM_SIZE 0x4000               // 显卡内存大小
+#define MEM_BASE 0xB8000              // 显卡内存起始位置（0xB8000~0xBFFFF, 即32K）
+#define MEM_SIZE (4000*2)             // 设置要使用的显卡内存大小（一屏4000字节，约4K，也就是显存最多可加载8屏多一点的数据）
 #define MEM_END (MEM_BASE + MEM_SIZE) // 显卡内存结束位置
 #define WIDTH 80                      // 屏幕文本列数
 #define HEIGHT 25                     // 屏幕文本行数
@@ -103,17 +103,17 @@
 
 static uint screen; // 当前显示器开始的内存位置
 static uint cursor; // 当前光标的内存位置
-static uint x, y;   // 当前光标的坐标
+static uint x, y;   // 当前光标的坐标，x范围0~79，y范围0~24
 
-// 移动光标
+// 更新光标位置，光标位置从0开始（对应内存地址为0xB8000），位置+1，对应内存地址+2
 static void move_cursor() {
     outb(CRT_ADDR_REG, CRT_CURSOR_H);
     outb(CRT_DATA_REG, ((cursor - MEM_BASE) >> 9) & 0xff);
     outb(CRT_ADDR_REG, CRT_CURSOR_L);
-    outb(CRT_DATA_REG, ((cursor - MEM_BASE) >> 1) & 0xff); // pos=index/2
+    outb(CRT_DATA_REG, ((cursor - MEM_BASE) >> 1) & 0xff); // 光标在屏幕的位置=屏幕占用字节数/2
 }
 
-// 设置当前显示器开始的位置
+// 更新屏幕显示位置（将指定位置在屏幕中置顶显示）
 static void move_screen() {
     outb(CRT_ADDR_REG, CRT_SCREEN_H);
     outb(CRT_DATA_REG, ((screen - MEM_BASE) >> 9) & 0xff);
@@ -127,42 +127,63 @@ void console_clear() {
     x = y = 0;
     move_cursor();
     move_screen();
-
     uint16 *ptr = (uint16 *) MEM_BASE;
     while (ptr < MEM_END) {
         *ptr++ = CHARACTER_SPACE;
     }
 }
 
+// 滚动到顶部
+void scroll_to_top() {
+    screen = MEM_BASE;
+    move_screen();
+}
 
-// 屏幕上卷一行
-static void scroll_up() {
-    if (screen + SCR_SIZE + ROW_SIZE < MEM_END) {
-        // 未超出显存范围,采用移动屏幕的方式
-        screen += ROW_SIZE;
-        cursor += ROW_SIZE;
+// 滚动到光标处（当光标超出当前显示屏幕下方时，将光标对齐到屏幕最后一行）
+void scroll_to_cursor() {
+    if (cursor >= screen + SCR_SIZE) {
+        screen = cursor - 2 * x - ROW_SIZE * (HEIGHT - 1);
         move_screen();
-    } else {
-        // 超出显存后, 仅在最后一页进行刷新(当前屏幕所有内容上移一行,再清空最后一行)
-        memcpy((void *) screen, (void *) (screen + ROW_SIZE), SCR_SIZE);
-        uint16 *ptr = (uint16 *) (screen + SCR_SIZE - WIDTH);
-        for (size_t i = 0; i < WIDTH; i++) {
+    }
+}
+
+// 屏幕上翻阅一行（无条件上翻，仅控制屏幕，判断边界）
+static void scroll_up() {
+    if (screen + ROW_SIZE <= MEM_END - SCR_SIZE) {
+        screen += ROW_SIZE;
+        move_screen();
+    }
+}
+
+// 屏幕下翻阅一行（无条件下翻，仅控制屏幕，判断边界）
+static void scroll_down() {
+    if (screen - ROW_SIZE >= MEM_BASE) {
+        screen -= ROW_SIZE;
+        move_screen();
+    }
+}
+
+// check cursor fix overflow, 检查光标是否溢出，如果溢出，则向上迁移一行数据
+static void cf_overflow() {
+    if (cursor >= MEM_END) {
+        memcpy((void *) MEM_BASE, (void *) (MEM_BASE + ROW_SIZE), MEM_SIZE - ROW_SIZE);
+        cursor -= ROW_SIZE; // 恢复cursor
+        uint16 *ptr = (uint16 *) cursor;
+        for (size_t i = x; i < WIDTH; i++) {
             *ptr++ = CHARACTER_SPACE;
         }
     }
 }
 
-// 换行
+// 换行（只控制光标，不控制屏幕）
 static void command_lf() {
-    if (y + 1 < HEIGHT) {
+    cursor += ROW_SIZE;
+    if (y < HEIGHT - 1) {
         y++;
-        cursor += ROW_SIZE;
-        return;
     }
-    scroll_up();
 }
 
-// 回车
+// 回车（只控制光标，不控制屏幕）
 static void command_cr() {
     cursor -= (x << 1);
     x = 0;
@@ -204,22 +225,26 @@ void console_write(char *buf, uint32 count) {
             case ASCII_LF:
             case ASCII_CR:
             case ASCII_FF:
+                // 无条件新启一行
                 command_lf();
                 command_cr();
+                cf_overflow();
+                scroll_to_cursor();
                 ptr = (char *) cursor;
                 break;
 
             default:
+                // 在光标处写入字符
                 *ptr++ = c;
                 *ptr++ = CHARACTER_ATTR;
-
+                // 移动光标到下一个位置
                 cursor += 2;
                 x++;
-
+                // 处理换行
                 if (x >= WIDTH) {
                     x -= WIDTH;
-                    cursor -= ROW_SIZE;
-                    command_lf();
+                    cf_overflow();
+                    scroll_to_cursor();
                     ptr = (char *) cursor;
                 }
                 break;

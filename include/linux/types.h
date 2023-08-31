@@ -9,9 +9,6 @@
 #define EOS '\0' // End Of String
 #define NULL ((void *)0) // null pointer
 
-#define true 1
-#define false 0
-
 typedef char int8;
 typedef short int16;
 typedef int int32;
@@ -24,5 +21,9 @@ typedef unsigned int uint32;
 typedef unsigned long long uint64;
 
 typedef unsigned int size_t;
+
+#define bool uint8
+#define true 1
+#define false 0
 
 #endif //TOS_TYPES_H
