@@ -8,7 +8,8 @@ BUILD_MBR_O_FILES := $(BUILD)/$(MBR_PATH)/mbr.o $(BUILD)/$(MBR_PATH)/loader.o
 BUILD_BRIDGE_O_FILES := $(BUILD)/$(BRIDGE_PATH)/head.o $(BUILD)/$(BRIDGE_PATH)/io.o $(BUILD)/$(BRIDGE_PATH)/interrupt.o
 BUILD_KERNEL_O_FILES := $(BUILD)/$(KERNEL_PATH)/main.o $(BUILD)/$(KERNEL_PATH)/console.o $(BUILD)/$(KERNEL_PATH)/string.o \
 	$(BUILD)/$(KERNEL_PATH)/vsprintf.o $(BUILD)/$(KERNEL_PATH)/printk.o \
-	$(BUILD)/$(KERNEL_PATH)/gdt.o $(BUILD)/$(KERNEL_PATH)/idt.o
+	$(BUILD)/$(KERNEL_PATH)/gdt.o $(BUILD)/$(KERNEL_PATH)/idt.o \
+	$(BUILD)/$(KERNEL_PATH)/pic_handler.o $(BUILD)/$(KERNEL_PATH)/keyboard.o
 
 BUILD_KERNEL_ELF := $(BUILD)/kernel.elf
 BUILD_KERNEL_BIN := $(BUILD)/kernel.bin

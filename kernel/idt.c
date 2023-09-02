@@ -3,8 +3,8 @@
 //
 
 #include "../include/dt.h"
-#include "../include/bridge/sys.h"
-#include "../include/bridge/io.h"
+#include "../include/linux/kernel.h"
+#include "../include/pic_handler.h"
 
 /*
  -----------------------------------------------------------------------------------------------------------------
@@ -227,51 +227,15 @@ void idt_init() {
     __asm__ volatile("lidt idt_ptr;");
 }
 
-#define PIC_M_CTRL  0x20    // 主片的控制端口
-#define PIC_M_DATA  0x21    // 主片的数据端口
-#define PIC_S_CTRL  0xa0    // 从片的控制端口
-#define PIC_S_DATA  0xa1    // 从片的数据端口
-#define PIC_EOI     0x20    // 通知中断控制器中断结束
-
-void send_eoi(int idt_index) {
-    if (idt_index >= 0x20 && idt_index < 0x28) {
-        outb(PIC_M_CTRL, PIC_EOI);
-    } else if (idt_index >= 0x28 && idt_index < 0x30) {
-        outb(PIC_M_CTRL, PIC_EOI);
-        outb(PIC_S_CTRL, PIC_EOI);
-    }
-}
-
-// 8259A中断处理
-void interrupt_handler_8259a(int idt_index, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax, int eip,char cs, int eflags) {
-    // send EOI
-    outb(PIC_M_CTRL, PIC_EOI);
-    if (idt_index >= 0x28) { // 由8259A从片触发
-        outb(PIC_S_CTRL, PIC_EOI);
-    }
-
-    // 键盘中断
-    if (idt_index == 0x20) {
-        send_eoi(idt_index);
-        char scancode = inb(0x60);
-        printk("8259a keyboard interrupt : code = 0x%02X\n", scancode);
-        return;
-    }
-
-    // 其他中断
-    printk("8259a interrupt : VECTOR = 0x%02X\n", idt_index);
-}
-
-
 // 从汇编中回调
 void interrupt_handler_callback(int idt_index, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax, int eip, char cs, int eflags) {
-    // 由8259A芯片触发
+    // 由可编程中断控制芯片触发
     if (idt_index >= 0x20 && idt_index < 0x30) {
-        interrupt_handler_8259a(idt_index, edi, esi, ebp, esp, ebx, edx, ecx, eax, eip, cs, eflags);
+        interrupt_handler_pic(idt_index, edi, esi, ebp, esp, ebx, edx, ecx, eax, eip, cs, eflags);
         return;
     }
-    // 其他中断
-    printk("============================\n");
+    // 其他中断，基本都称之为异常
+    printk("\n============================\n");
     printk("INTERRUPT : \n");
     printk("   VECTOR : 0x%02X\n", idt_index);
     printk("   EFLAGS : 0x%08X\n", eflags);

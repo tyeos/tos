@@ -52,6 +52,10 @@ void gdt_init() {
     set_gdt_entry(R3_CODE_GDT_ENTRY_INDEX, 0b1000); // 代码段，只执行
     set_gdt_entry(R3_DATA_GDT_ENTRY_INDEX, 0b0010); // 数据段，只读
 
+    // 创建r3用的选择子：代码段、数据段
+    r3_code_selector = R3_CODE_GDT_ENTRY_INDEX << 3 | 0b011;
+    r3_data_selector = R3_DATA_GDT_ENTRY_INDEX << 3 | 0b011;
+
     gdt_ptr.base = (int) &gdt;
     gdt_ptr.limit = sizeof(gdt) - 1;
 
