@@ -228,9 +228,9 @@ SELECTOR_SCREEN equ 4<<3 + TI_GDT + RPL_0
 
 
 [SECTION .data]
-TOC_ADDR equ 0x1500
-TOC_SECTOR_START equ 5
-TOC_SECTOR_NUM equ 60
+HEAD_ADDR equ 0x1500
+HEAD_SECTOR_START equ 5
+HEAD_SECTOR_NUM equ 60
 
 msg:
     db "breaking through 512 bytes!", 10, 13, 0
@@ -322,12 +322,12 @@ protected_model_start:
     mov esp, 0x9fbff
 
     ; 将内核入口程序读入内存
-    mov edi, TOC_ADDR
-    mov ecx, TOC_SECTOR_START
-    mov bl, TOC_SECTOR_NUM
+    mov edi, HEAD_ADDR
+    mov ecx, HEAD_SECTOR_START
+    mov bl, HEAD_SECTOR_NUM
     call read_hd
 
-    jmp SELECTOR_CODE:TOC_ADDR
+    jmp SELECTOR_CODE:HEAD_ADDR
 
 ; -----------------------------------------------------
 ; 读取硬盘n个扇区，装载到指定内存中
