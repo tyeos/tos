@@ -93,3 +93,4 @@ qemu_gdb: all
 
 clean:
 	$(shell rm -rf $(BUILD))
+	$(shell rm -f ./bx_enh_dbg.ini)

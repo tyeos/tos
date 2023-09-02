@@ -59,6 +59,5 @@ void gdt_init() {
     gdt_ptr.base = (int) &gdt;
     gdt_ptr.limit = sizeof(gdt) - 1;
 
-    BOCHS_DEBUG_MAGIC
     __asm__ volatile ("lgdt gdt_ptr;"); // 重设GDT
 }
