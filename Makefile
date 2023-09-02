@@ -1,11 +1,11 @@
 BUILD := ./build
 
-MBR_PATH := mbr
+BOOT_PATH := boot
 BRIDGE_PATH := bridge
 KERNEL_PATH := kernel
 CHR_DRV_PATH := $(KERNEL_PATH)/chr_drv
 
-BUILD_MBR_O_FILES := $(BUILD)/$(MBR_PATH)/mbr.o $(BUILD)/$(MBR_PATH)/loader.o
+BUILD_BOOT_O_FILES := $(BUILD)/$(BOOT_PATH)/mbr.o $(BUILD)/$(BOOT_PATH)/loader.o
 BUILD_BRIDGE_O_FILES := $(BUILD)/$(BRIDGE_PATH)/head.o $(BUILD)/$(BRIDGE_PATH)/io.o $(BUILD)/$(BRIDGE_PATH)/interrupt.o
 BUILD_KERNEL_O_FILES := $(BUILD)/$(KERNEL_PATH)/main.o $(BUILD)/$(KERNEL_PATH)/string.o \
 	$(BUILD)/$(KERNEL_PATH)/vsprintf.o $(BUILD)/$(KERNEL_PATH)/printk.o \
@@ -35,7 +35,7 @@ CFLAGS := $(strip $(CFLAGS))
 DEBUG := -g
 
 mkdir:
-	$(shell mkdir -p $(BUILD)/$(MBR_PATH))
+	$(shell mkdir -p $(BUILD)/$(BOOT_PATH))
 	$(shell mkdir -p $(BUILD)/$(BRIDGE_PATH))
 	$(shell mkdir -p $(BUILD)/$(CHR_DRV_PATH))
 
@@ -46,7 +46,7 @@ $(BUILD)/$(BRIDGE_PATH)/%.o: $(BRIDGE_PATH)/%.asm
 	# 运行在linux下，所以采用elf格式，加-g可生成调试符号，要和C程序一起打包
 	nasm -f elf32 $(DEBUG) $< -o $@
 
-$(BUILD)/$(MBR_PATH)/%.o: $(MBR_PATH)/%.asm
+$(BUILD)/$(BOOT_PATH)/%.o: $(BOOT_PATH)/%.asm
 	nasm $< -o $@
 
 
@@ -62,16 +62,16 @@ kernel: $(BUILD_BRIDGE_O_FILES) $(BUILD_KERNEL_O_FILES)
 	# 生成二进制文件，用于打包到镜像中
 	objcopy -O binary $(BUILD_KERNEL_ELF) $(BUILD_KERNEL_BIN)
 
-build: mkdir $(BUILD_MBR_O_FILES) kernel
+build: mkdir $(BUILD_BOOT_O_FILES) kernel
 
 install:
 	$(shell rm -f $(BUILD_HD_IMG))
 	# 创建硬盘镜像文件，-hd指定镜像大小，单位M
 	bximage -q -hd=16 -func=create -sectsize=512 -imgmode=flat $(BUILD_HD_IMG)
 	# MBR装在0盘0道1扇区
-	dd if=$(word 1, $(BUILD_MBR_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=0 count=1 conv=notrunc
+	dd if=$(word 1, $(BUILD_BOOT_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=0 count=1 conv=notrunc
 	# 给loader分配4个扇区
-	dd if=$(word 2, $(BUILD_MBR_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=1 count=4 conv=notrunc
+	dd if=$(word 2, $(BUILD_BOOT_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=1 count=4 conv=notrunc
 	# 给system分配60个扇区
 	dd if=$(BUILD_KERNEL_BIN) of=$(BUILD_HD_IMG) bs=512 seek=5 count=60 conv=notrunc
 
