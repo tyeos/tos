@@ -8,9 +8,9 @@
          抬起返回的码叫断码 break code
     断码 = 通码 | 8
  */
-#include "../include/linux/kernel.h"
-#include "../include/bridge/io.h"
-#include "../include/linux/types.h"
+#include "../../include/print.h"
+#include "../../include/bridge/io.h"
+#include "../../include/linux/types.h"
 
 #define INV 0 // 不可见字符
 #define CODE_PRINT_SCREEN_DOWN 0xB7

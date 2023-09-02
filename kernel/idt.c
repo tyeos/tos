@@ -3,8 +3,8 @@
 //
 
 #include "../include/dt.h"
-#include "../include/linux/kernel.h"
-#include "../include/pic_handler.h"
+#include "../include/print.h"
+#include "../include/pic.h"
 
 /*
  -----------------------------------------------------------------------------------------------------------------

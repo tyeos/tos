@@ -2,7 +2,7 @@
 // Created by toney on 2023-09-02.
 //
 
-#include "../include/linux/kernel.h"
+#include "../include/print.h"
 #include "../include/linux/types.h"
 #include "../include/dt.h"
 #include "../include/string.h"

@@ -3,13 +3,15 @@ BUILD := ./build
 MBR_PATH := mbr
 BRIDGE_PATH := bridge
 KERNEL_PATH := kernel
+CHR_DRV_PATH := $(KERNEL_PATH)/chr_drv
 
 BUILD_MBR_O_FILES := $(BUILD)/$(MBR_PATH)/mbr.o $(BUILD)/$(MBR_PATH)/loader.o
 BUILD_BRIDGE_O_FILES := $(BUILD)/$(BRIDGE_PATH)/head.o $(BUILD)/$(BRIDGE_PATH)/io.o $(BUILD)/$(BRIDGE_PATH)/interrupt.o
-BUILD_KERNEL_O_FILES := $(BUILD)/$(KERNEL_PATH)/main.o $(BUILD)/$(KERNEL_PATH)/console.o $(BUILD)/$(KERNEL_PATH)/string.o \
+BUILD_KERNEL_O_FILES := $(BUILD)/$(KERNEL_PATH)/main.o $(BUILD)/$(KERNEL_PATH)/string.o \
 	$(BUILD)/$(KERNEL_PATH)/vsprintf.o $(BUILD)/$(KERNEL_PATH)/printk.o \
 	$(BUILD)/$(KERNEL_PATH)/gdt.o $(BUILD)/$(KERNEL_PATH)/idt.o \
-	$(BUILD)/$(KERNEL_PATH)/pic_handler.o $(BUILD)/$(KERNEL_PATH)/keyboard.o
+	$(BUILD)/$(KERNEL_PATH)/pic_handler.o \
+	$(BUILD)/$(CHR_DRV_PATH)/console.o $(BUILD)/$(CHR_DRV_PATH)/keyboard.o $(BUILD)/$(CHR_DRV_PATH)/clock.o
 
 BUILD_KERNEL_ELF := $(BUILD)/kernel.elf
 BUILD_KERNEL_BIN := $(BUILD)/kernel.bin
@@ -35,7 +37,7 @@ DEBUG := -g
 mkdir:
 	$(shell mkdir -p $(BUILD)/$(MBR_PATH))
 	$(shell mkdir -p $(BUILD)/$(BRIDGE_PATH))
-	$(shell mkdir -p $(BUILD)/$(KERNEL_PATH))
+	$(shell mkdir -p $(BUILD)/$(CHR_DRV_PATH))
 
 $(BUILD)/$(KERNEL_PATH)/%.o: $(KERNEL_PATH)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@

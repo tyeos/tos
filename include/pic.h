@@ -7,4 +7,7 @@
 
 void interrupt_handler_pic(int idt_index, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax, int eip,char cs, int eflags);
 
+void keyboard_interrupt_handler();
+void clock_interrupt_handler();
+
 #endif //TOS_PIC_HANDLER_H

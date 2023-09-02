@@ -3,8 +3,8 @@
 //
 
 #include "../include/bridge/io.h"
-#include "../include/linux/kernel.h"
-#include "../include/keyboard.h"
+#include "../include/print.h"
+#include "../include/pic.h"
 
 /*
  * PIC, 即 Programmable Interrupt Controller
@@ -28,12 +28,16 @@ static void send_eoi(int idt_index) {
 
 // 可编程中断控制器（8259A）的中断处理
 void interrupt_handler_pic(int idt_index, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax, int eip,char cs, int eflags) {
-    // 键盘中断
-    if (idt_index == 0x21) {
-        keyboard_interrupt_handler();
-        return;
+    send_eoi(idt_index);
+    switch (idt_index) {
+        case 0x20:// 时钟中断
+            clock_interrupt_handler();
+            break;
+        case 0x21:// 键盘中断
+            keyboard_interrupt_handler();
+            break;
+        default:  // 其他中断
+            printk("\npic interrupt: VECTOR = 0x%02X\n", idt_index);
+            break;
     }
-
-    // 其他中断
-    printk("\npic interrupt: VECTOR = 0x%02X\n", idt_index);
 }
