@@ -1,17 +1,29 @@
 BUILD := ./build
 
-BOOT_PATH := boot
-BRIDGE_PATH := bridge
-KERNEL_PATH := kernel
-CHR_DRV_PATH := $(KERNEL_PATH)/chr_drv
+ASM_FILE_SUFFIX := .asm
+C_FILE_SUFFIX := .c
 
-BUILD_BOOT_O_FILES := $(BUILD)/$(BOOT_PATH)/mbr.o $(BUILD)/$(BOOT_PATH)/loader.o
-BUILD_BRIDGE_O_FILES := $(BUILD)/$(BRIDGE_PATH)/head.o $(BUILD)/$(BRIDGE_PATH)/io.o $(BUILD)/$(BRIDGE_PATH)/interrupt.o
-BUILD_KERNEL_O_FILES := $(BUILD)/$(KERNEL_PATH)/main.o $(BUILD)/$(KERNEL_PATH)/string.o \
-	$(BUILD)/$(KERNEL_PATH)/vsprintf.o $(BUILD)/$(KERNEL_PATH)/printk.o \
-	$(BUILD)/$(KERNEL_PATH)/gdt.o $(BUILD)/$(KERNEL_PATH)/idt.o \
-	$(BUILD)/$(KERNEL_PATH)/pic_handler.o \
-	$(BUILD)/$(CHR_DRV_PATH)/console.o $(BUILD)/$(CHR_DRV_PATH)/keyboard.o $(BUILD)/$(CHR_DRV_PATH)/clock.o
+# boot dir
+BOOT := boot
+BOOT_ASM_FILE_NAMES := mbr loader
+
+# bridge dir
+BRIDGE := bridge
+BRIDGE_ASM_FILES := $(shell ls $(BRIDGE)/*$(ASM_FILE_SUFFIX))
+# 字符串替换函数用法: $(subst 被替换字符串,替换字符串,被操作字符串)
+BRIDGE_ASM_FILE_NAMES := $(subst $(ASM_FILE_SUFFIX),,$(subst $(BRIDGE)/,,$(BRIDGE_ASM_FILES)))
+
+# kernel dir, and subdir
+KERNEL := kernel
+KERNEL_SUBS := chr_drv
+KERNEL_DIRS := $(KERNEL) $(foreach v, $(KERNEL_SUBS), $(KERNEL)/$(v))
+KERNEL_C_FILES := $(foreach v, $(KERNEL_DIRS), $(shell ls $(v)/*$(C_FILE_SUFFIX)))
+KERNEL_C_FILE_NAMES := $(subst $(C_FILE_SUFFIX),,$(subst $(KERNEL)/,,$(KERNEL_C_FILES)))
+
+# 循环函数用法: $(foreach 子项变量名,集合列表,子项操作)
+BUILD_BOOT_O_FILES := $(foreach v, $(BOOT_ASM_FILE_NAMES), $(BUILD)/$(BOOT)/$(v).o)
+BUILD_BRIDGE_O_FILES := $(foreach v, $(BRIDGE_ASM_FILE_NAMES), $(BUILD)/$(BRIDGE)/$(v).o)
+BUILD_KERNEL_O_FILES := $(foreach v, $(KERNEL_C_FILE_NAMES), $(BUILD)/$(KERNEL)/$(v).o)
 
 BUILD_KERNEL_ELF := $(BUILD)/kernel.elf
 BUILD_KERNEL_BIN := $(BUILD)/kernel.bin
@@ -19,8 +31,7 @@ BUILD_KERNEL_MAP := $(BUILD)/kernel.map
 
 BUILD_HD_IMG := $(BUILD)/hd.img
 
-
-# 由于自己写的内核很多东西都没有，比如标准库的打印函数，这里把相关内容都屏蔽掉
+# 由于是自己写的内核，所以很多C标准库的东西不可用，比如标准库的打印函数，或是不需要的，这里把相关内容都屏蔽掉
 CFLAGS := -m32 					# 32位程序
 CFLAGS += -masm=intel
 CFLAGS += -fno-builtin			# 不需要gcc内置函数
@@ -35,20 +46,19 @@ CFLAGS := $(strip $(CFLAGS))
 DEBUG := -g
 
 mkdir:
-	$(shell mkdir -p $(BUILD)/$(BOOT_PATH))
-	$(shell mkdir -p $(BUILD)/$(BRIDGE_PATH))
-	$(shell mkdir -p $(BUILD)/$(CHR_DRV_PATH))
+	$(shell mkdir -p $(BUILD)/$(BOOT))
+	$(shell mkdir -p $(BUILD)/$(BRIDGE))
+	$(foreach v, $(KERNEL_DIRS), $(shell mkdir -p $(BUILD)/$(v)))
 
-$(BUILD)/$(KERNEL_PATH)/%.o: $(KERNEL_PATH)/%.c
+$(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@
 
-$(BUILD)/$(BRIDGE_PATH)/%.o: $(BRIDGE_PATH)/%.asm
+$(BUILD)/$(BRIDGE)/%.o: $(BRIDGE)/%.asm
 	# 运行在linux下，所以采用elf格式，加-g可生成调试符号，要和C程序一起打包
 	nasm -f elf32 $(DEBUG) $< -o $@
 
-$(BUILD)/$(BOOT_PATH)/%.o: $(BOOT_PATH)/%.asm
+$(BUILD)/$(BOOT)/%.o: $(BOOT)/%.asm
 	nasm $< -o $@
-
 
 kernel: $(BUILD_BRIDGE_O_FILES) $(BUILD_KERNEL_O_FILES)
 	$(shell rm -f $(BUILD_KERNEL_ELF) $(BUILD_KERNEL_MAP) $(BUILD_KERNEL_BIN))
@@ -64,7 +74,7 @@ kernel: $(BUILD_BRIDGE_O_FILES) $(BUILD_KERNEL_O_FILES)
 
 build: mkdir $(BUILD_BOOT_O_FILES) kernel
 
-install:
+all: build
 	$(shell rm -f $(BUILD_HD_IMG))
 	# 创建硬盘镜像文件，-hd指定镜像大小，单位M
 	bximage -q -hd=16 -func=create -sectsize=512 -imgmode=flat $(BUILD_HD_IMG)
@@ -74,8 +84,6 @@ install:
 	dd if=$(word 2, $(BUILD_BOOT_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=1 count=4 conv=notrunc
 	# 给system分配60个扇区
 	dd if=$(BUILD_KERNEL_BIN) of=$(BUILD_HD_IMG) bs=512 seek=5 count=60 conv=notrunc
-
-all: build install
 
 bochs: all
 	bochs -q -f bochsrc
@@ -94,3 +102,5 @@ qemu_gdb: all
 clean:
 	$(shell rm -rf $(BUILD))
 	$(shell rm -f ./bx_enh_dbg.ini)
+
+.PHONY: mkdir clean
