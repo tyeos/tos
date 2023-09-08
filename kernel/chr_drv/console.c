@@ -205,8 +205,6 @@ static void command_del() {
 }
 
 void console_write(char *buf, uint32 count) {
-    CLI
-
     char c;
     char *ptr = (char *) cursor;
     while (count--) {
@@ -254,6 +252,4 @@ void console_write(char *buf, uint32 count) {
         }
     }
     move_cursor();
-
-    STI
 }

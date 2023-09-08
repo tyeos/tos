@@ -15,7 +15,7 @@ BRIDGE_ASM_FILE_NAMES := $(subst $(ASM_FILE_SUFFIX),,$(subst $(BRIDGE)/,,$(BRIDG
 
 # kernel dir, and subdir
 KERNEL := kernel
-KERNEL_SUBS := chr_drv
+KERNEL_SUBS := chr_drv mm
 KERNEL_DIRS := $(KERNEL) $(foreach v, $(KERNEL_SUBS), $(KERNEL)/$(v))
 KERNEL_C_FILES := $(foreach v, $(KERNEL_DIRS), $(shell ls $(v)/*$(C_FILE_SUFFIX)))
 KERNEL_C_FILE_NAMES := $(subst $(C_FILE_SUFFIX),,$(subst $(KERNEL)/,,$(KERNEL_C_FILES)))
