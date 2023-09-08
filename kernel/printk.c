@@ -4,12 +4,15 @@
 
 #include "../include/stdarg.h"
 #include "../include/console.h"
+#include "../include/bridge/sys.h"
 
 static char buf[1024];
 
 extern int vsprintf(char *buf, const char *fmt, va_list args);
 
 int printk(const char * fmt, ...) {
+    CLI
+
     va_list args;
     int size;
 
@@ -18,5 +21,7 @@ int printk(const char * fmt, ...) {
     va_end(args);
 
     console_write(buf, size);
+
+    STI
     return size;
 }
