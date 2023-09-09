@@ -5,7 +5,7 @@
 #ifndef TOS_MM_H
 #define TOS_MM_H
 
-#include "linux/types.h"
+#include "types.h"
 
 typedef struct {
     uint32 base_addr_low;    // 内存基地址的低32位
@@ -20,6 +20,27 @@ typedef struct {
     ards_t *ards; // 地址范围描述符结构
 } checked_memory_info_t;
 
-void print_checked_memory_info();
+
+typedef struct {
+    uint addr_start;     // 可用内存起始地址
+    uint addr_end;       // 可用内存结束地址
+    uint available_size; // 可用内存大小
+    uint pages_total;    // 机器物理内存共多少page
+    uint pages_free;     // 机器物理内存还剩多少page
+    uint pages_used;     // 机器物理内存用了多少page
+    uint alloc_cursor;   // 内存分配游标
+    uint8 *map;          // 用位图记录使用情况，1B映射一个page
+} physical_memory_alloc_t;
+
+
+void memory_init();
+void virtual_memory_init();
+
+uint get_cr3();
+void set_cr3(uint v);
+void enable_page();
+
+void* alloc_page();
+void free_page(void *p);
 
 #endif //TOS_MM_H

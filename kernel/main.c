@@ -10,13 +10,14 @@
 
 void kernel_main(void) {
     console_clear();
+    memory_init();
+    virtual_memory_init(); // 开启分页, 使用虚拟内存地址
+
     gdt_init();
     idt_init();
     clock_init();
     printk("kernel inited!\n");
     STI
-
-    print_checked_memory_info();
 
     while (true);
 }

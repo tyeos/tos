@@ -5,7 +5,7 @@
 #ifndef TOS_STRING_H
 #define TOS_STRING_H
 
-#include "../include/linux/types.h"
+#include "../include/types.h"
 
 char *strcpy(char *dest, const char *src);
 

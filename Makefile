@@ -11,7 +11,9 @@ BOOT_ASM_FILE_NAMES := mbr loader
 BRIDGE := bridge
 BRIDGE_ASM_FILES := $(shell ls $(BRIDGE)/*$(ASM_FILE_SUFFIX))
 # 字符串替换函数用法: $(subst 被替换字符串,替换字符串,被操作字符串)
-BRIDGE_ASM_FILE_NAMES := $(subst $(ASM_FILE_SUFFIX),,$(subst $(BRIDGE)/,,$(BRIDGE_ASM_FILES)))
+# head为c内核入口, 必须位于首位
+BRIDGE_ASM_FILES := $(subst head.asm/,,$(BRIDGE_ASM_FILES))
+BRIDGE_ASM_FILE_NAMES := head $(subst $(ASM_FILE_SUFFIX),,$(subst $(BRIDGE)/,,$(BRIDGE_ASM_FILES)))
 
 # kernel dir, and subdir
 KERNEL := kernel
@@ -86,6 +88,7 @@ all: build
 	dd if=$(BUILD_KERNEL_BIN) of=$(BUILD_HD_IMG) bs=512 seek=5 count=60 conv=notrunc
 
 bochs: all
+	$(shell rm -f $(BUILD)/hd.img.lock)
 	bochs -q -f bochsrc
 
 qemu: all
@@ -97,7 +100,7 @@ qemu_gdb: all
 	# -S: Do not start CPU at startup (you must type 'c' in the monitor).
 	# -s: Shorthand for -gdb tcp::1234, i.e. open a gdbserver on TCP port 1234.
 	# 注：在CLion中添加RemoteDebug时，'target remote' args 填写 127.0.0.1:1234
-	qemu-system-x86_64 -m 32M -S -s -drive file=$(BUILD_HD_IMG),format=raw,index=0,media=disk
+	qemu-system-i386 -m 32M -boot c -S -s -drive file=$(BUILD_HD_IMG),format=raw,index=0,media=disk
 
 clean:
 	$(shell rm -rf $(BUILD))

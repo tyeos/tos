@@ -10,7 +10,7 @@
  */
 #include "../../include/print.h"
 #include "../../include/bridge/io.h"
-#include "../../include/linux/types.h"
+#include "../../include/types.h"
 
 #define INV 0 // 不可见字符
 #define CODE_PRINT_SCREEN_DOWN 0xB7

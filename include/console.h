@@ -5,7 +5,7 @@
 #ifndef TOS_CONSOLE_H
 #define TOS_CONSOLE_H
 
-#include "../include/linux/types.h"
+#include "../include/types.h"
 
 void console_clear(void);
 void console_write(char *buf, uint32 count);
