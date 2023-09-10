@@ -40,7 +40,8 @@ uint get_cr3();
 void set_cr3(uint v);
 void enable_page();
 
-void* alloc_page();
+void *alloc_page();
+void *alloc_pages(uint count, void **pages);
 void free_page(void *p);
 
 #endif //TOS_MM_H

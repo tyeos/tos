@@ -55,49 +55,81 @@ void memory_init() {
            g_physical_memory.addr_start, g_physical_memory.addr_end);
 }
 
-
 void *alloc_page() {
     if (g_physical_memory.addr_start != AVAILABLE_MEMORY_FROM) {
-        printk("no memory available!\n");
+        printk("[%s] no memory available!\n", __FUNCTION__);
         return NULL;
     }
-
     if (g_physical_memory.pages_used >= g_physical_memory.pages_total) {
-        printk("memory used up!\n");
+        printk("[%s] memory used up!\n", __FUNCTION__);
         return NULL;
     }
-
-    bool found = false;
-    uint index = g_physical_memory.alloc_cursor;
-    for (uint i = 0; i < g_physical_memory.pages_total; i++) {
-        index = (index + i) % g_physical_memory.pages_total;
-        if (g_physical_memory.map[index] == 0) {
-            found = true;
-            break;
+    // 查找次数最多为总页数
+    for (uint index, i = 0; i < g_physical_memory.pages_total; i++) {
+        index = (g_physical_memory.alloc_cursor + i) % g_physical_memory.pages_total;
+        if (g_physical_memory.map[index]) {
+            continue;
         }
+        // 可用页
+        g_physical_memory.map[index] = 1;
+        g_physical_memory.pages_used++;
+        g_physical_memory.alloc_cursor = index;
+        void *p = (void *) (g_physical_memory.addr_start + (index << 12));
+        printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.pages_used);
+        return p;
     }
-    if (!found) {
-        printk("memory error!\n");
+    // 前面已经进行空间预测, 逻辑不会走到这里
+    printk("[%s] memory error!\n", __FUNCTION__);
+    return NULL;
+}
+
+void *alloc_pages(uint count, void **pages) {
+    if (g_physical_memory.addr_start != AVAILABLE_MEMORY_FROM || count < 1) {
+        printk("[%s] no memory available!\n", __FUNCTION__);
         return NULL;
     }
-    g_physical_memory.map[index] = 1;
-    g_physical_memory.alloc_cursor = index;
-    g_physical_memory.pages_used++;
-
-    void *p = (void *) (g_physical_memory.addr_start + (index << 12));
-    printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.pages_used);
-    return p;
+    if (g_physical_memory.pages_used + count > g_physical_memory.pages_total) {
+        printk("[%s] memory used up!\n", __FUNCTION__);
+        return NULL;
+    }
+    // 查找次数最多为总页数
+    for (uint index, found = 0, i = 0; i < g_physical_memory.pages_total; i++) {
+        index = (g_physical_memory.alloc_cursor + i) % g_physical_memory.pages_total;
+        if (g_physical_memory.map[index]) {
+            continue;
+        }
+        // 可用页
+        g_physical_memory.map[index] = 1;
+        g_physical_memory.pages_used++;
+        pages[found] = (void *) (g_physical_memory.addr_start + (index << 12));
+        found++;
+        if (found < count) {
+            continue;
+        }
+        // 足量, 更新游标
+        g_physical_memory.alloc_cursor = index;
+        printk("[%s] alloc %d pages: [ ", __FUNCTION__, count);
+        if (count < 0x20) {
+            for (int j = 0; j < count; ++j) printk("0x%x ", pages[j]);
+        } else {
+            printk("first:0x%x, last:0x%x ", pages[0], pages[count - 1]);
+        }
+        printk("], used: %d pages\n", g_physical_memory.pages_used);
+        return pages[0]; // 返回首个元素地址
+    }
+    // 前面已经进行空间预测, 逻辑不会走到这里
+    printk("[%s] memory error!\n", __FUNCTION__);
+    return NULL;
 }
 
 void free_page(void *p) {
     if ((uint) p < g_physical_memory.addr_start || (uint) p > g_physical_memory.addr_end) {
-        printk("invalid address!\n");
+        printk("[%s] invalid address!\n", __FUNCTION__);
         return;
     }
 
     int index = (int) (p - g_physical_memory.addr_start) >> 12;
     g_physical_memory.map[index] = 0;
     g_physical_memory.pages_used--;
-
     printk("[%s] free page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.pages_used);
 }
