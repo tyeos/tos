@@ -11,6 +11,7 @@
 #include "../../include/print.h"
 #include "../../include/bridge/io.h"
 #include "../../include/types.h"
+#include "../../include/console.h"
 
 #define INV 0 // 不可见字符
 #define CODE_PRINT_SCREEN_DOWN 0xB7
@@ -301,8 +302,31 @@ void keyboard_interrupt_handler() {
         ch = keymap[makecode][shift];
     }
 
-    // 将可见字符输出到屏幕
-    if (ch != INV) {
-        printk("%c", ch);
+    // 不可见字符, 跳过
+    if (ch == INV) {
+        return;
     }
+
+    // 快捷键处理
+    if (ctrl_state) {
+        switch (ch) {
+            case 'f': // ctrl + f: 向下翻页 （forward）
+                scroll_up_page();
+                return;
+            case 'b': // ctrl + b: 向上翻页 （backward）
+                scroll_down_page();
+                return;
+            case 'd': // ctrl + d: 向下翻半页 （down）
+                scroll_up_rows(12); // 屏幕上卷
+                return;
+            case 'u': // ctrl + u: 向上翻半页 （up）
+                scroll_down_rows(12); // 屏幕下卷
+                return;
+            default:
+                break;
+        }
+    }
+
+    // 可见字符输出到屏幕
+    printk("%c", ch);
 }

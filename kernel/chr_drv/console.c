@@ -67,7 +67,7 @@
 #define CRT_CURSOR_L 0xF   // 光标位置 - 低位
 
 #define MEM_BASE 0xB8000              // 显卡内存起始位置（0xB8000~0xBFFFF, 即32K）
-#define MEM_SIZE (4000*2)             // 设置要使用的显卡内存大小（一屏4000字节，约4K，也就是显存最多可加载8屏多一点的数据）
+#define MEM_SIZE (4000*8)             // 设置要使用的显卡内存大小（一屏4000字节，约4K，也就是显存最多可加载8屏多一点的数据）
 #define MEM_END (MEM_BASE + MEM_SIZE) // 显卡内存结束位置
 #define WIDTH 80                      // 屏幕文本列数
 #define HEIGHT 25                     // 屏幕文本行数
@@ -148,20 +148,80 @@ void scroll_to_cursor() {
     }
 }
 
-// 屏幕上翻阅一行（无条件上翻，仅控制屏幕，判断边界）
-static void scroll_up() {
-    if (screen + ROW_SIZE <= MEM_END - SCR_SIZE) {
+// 屏幕往上翻阅一行（无条件上翻，仅控制屏幕，判断边界）
+static bool scroll_up() {
+    // 光标处于下方屏幕外, 并且未滚动到最后一屏的最后一行
+    bool ok = cursor >= screen + SCR_SIZE && screen + ROW_SIZE <= MEM_END - SCR_SIZE;
+    if (ok) {
         screen += ROW_SIZE;
         move_screen();
     }
+    return ok;
 }
 
-// 屏幕下翻阅一行（无条件下翻，仅控制屏幕，判断边界）
-static void scroll_down() {
-    if (screen - ROW_SIZE >= MEM_BASE) {
+// 屏幕往下翻阅一行（无条件下翻，仅控制屏幕，判断边界）
+static bool scroll_down() {
+    bool ok = screen - ROW_SIZE >= MEM_BASE;
+    if (ok) {
         screen -= ROW_SIZE;
         move_screen();
     }
+    return ok;
+}
+
+// 屏幕往上翻阅一页（无条件上翻，仅控制屏幕，判断边界）
+void scroll_up_page() {
+    if (cursor >= screen + 2 * SCR_SIZE - ROW_SIZE && screen + SCR_SIZE <= MEM_END - SCR_SIZE) {
+        screen += SCR_SIZE;
+        move_screen();
+        return;
+    }
+    for (int i = 0; i < HEIGHT; ++i) {
+        if (!scroll_up()) return;
+    }
+}
+
+// 屏幕往下翻阅一页（无条件下翻，仅控制屏幕，判断边界）
+void scroll_down_page() {
+    if (screen - SCR_SIZE >= MEM_BASE) {
+        screen -= SCR_SIZE;
+        move_screen();
+        return;
+    }
+    for (int i = 0; i < HEIGHT; ++i) {
+        if (!scroll_down()) return;
+    }
+}
+
+// 屏幕往上翻阅多行（无条件上翻，仅控制屏幕，判断边界）
+ int scroll_up_rows(int rows) {
+    if (rows > 0 && cursor >= screen + SCR_SIZE + (rows - 1) * ROW_SIZE &&
+        screen + ROW_SIZE * rows <= MEM_END - SCR_SIZE) {
+        screen += ROW_SIZE * rows;
+        move_screen();
+        return rows;
+    }
+    for (int i = 0; i < rows; ++i) {
+        if (!scroll_up()) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+// 屏幕往下翻阅多行（无条件下翻，仅控制屏幕，判断边界）
+ int scroll_down_rows(int rows) {
+    if (screen - ROW_SIZE * rows >= MEM_BASE) {
+        screen -= ROW_SIZE * rows;
+        move_screen();
+        return rows;
+    }
+    for (int i = 0; i < rows; ++i) {
+        if (!scroll_down()) {
+            return i;
+        }
+    }
+    return 0;
 }
 
 // check cursor fix overflow, 检查光标是否溢出，如果溢出，则向上迁移一行数据
