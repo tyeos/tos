@@ -10,7 +10,7 @@
 
 #define GDT_SIZE 256
 
-#define GDT_REAL_MODE_USED_SIZE 5 // 在实模式下创建的描述符数量
+#define GDT_REAL_MODE_USED_SIZE 5 // 在实模式下创建的描述符数量，参见 loader.asm 中的定义
 
 #define GDT_CODE_INDEX 1   // 代码段索引值
 #define GDT_DATA_INDEX 2   // 数据段索引值
@@ -28,8 +28,9 @@ int r3_data_selector;
 
 // 设置全局描述符表项
 // gdt_index: 范围 [GDT_REAL_MODE_USED_SIZE ~ GDT_SIZE)
-// type: 只用低四位
-static void set_gdt_entry(int gdt_index, char type) {
+// type: 内存段类型，只用低四位
+// dpl: 描述符特权级，只用低两位
+static void set_gdt_entry(int gdt_index, char type, char dpl) {
     global_descriptor *item = &gdt[gdt_index];
 
     item->base_low = 0;
@@ -39,8 +40,8 @@ static void set_gdt_entry(int gdt_index, char type) {
 
     item->segment = 1;          // 非系统段
     item->type = type & 0xf;    // 取低四位
+    item->DPL =  dpl & 0b11;    // 取低两位
 
-    item->DPL = 0b11;
     item->present = 1;
     item->available = 0;
     item->long_mode = 0;
@@ -85,8 +86,8 @@ void gdt_init() {
     gdt_page_model_fix();
 
     // 创建r3用的代码段和数据段描述符
-    set_gdt_entry(R3_CODE_GDT_ENTRY_INDEX, 0b1000); // 代码段，只执行
-    set_gdt_entry(R3_DATA_GDT_ENTRY_INDEX, 0b0010); // 数据段，只读
+    set_gdt_entry(R3_CODE_GDT_ENTRY_INDEX, 0b1000, 0b11); // 代码段，只执行，用户特权级
+    set_gdt_entry(R3_DATA_GDT_ENTRY_INDEX, 0b0010, 0b11); // 数据段，只读，用户特权级
 
     // 创建r3用的选择子：代码段、数据段
     r3_code_selector = R3_CODE_GDT_ENTRY_INDEX << 3 | 0b011;
