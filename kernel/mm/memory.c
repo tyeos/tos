@@ -10,7 +10,9 @@
 #define ARDS_BUFFER_ADDR 0x1102
 
 #define AVAILABLE_MEMORY_FROM 0x100000 // 1M以上作为有效内存
-#define MEMORY_BITMAP_FROM 0x10000     // 内存分配对应的位图存储起始地址
+
+#define MEMORY_BITMAP_LEN_FROM 0x10000 // 内存分配对应位图长度的存储地址
+#define MEMORY_BITMAP_FROM 0x10002     // 内存分配对应的位图存储起始地址
 
 physical_memory_alloc_t g_physical_memory;
 
@@ -29,7 +31,12 @@ void memory_init() {
         to = p->base_addr_low + p->length_low - 1;
         printk("memory: addr=[0x%x ~ 0x%x], len=0x%x, type=%d\n", from, to, len, p->type);
 
-        // 一般情况下有两块内存可用，第一块为0x0~0x9FBFF, 第二块为0x100000~0x1fdffff
+        /*
+         * 正常情况下, 从0x100000开始的一段内存一定可用.
+         * linux下虚拟环境实测有两块内存可用:
+         *    第一块从0x0(qemu、bochs)开始, 截至在0x9fbff(qemu) 或 0x9efff(bochs)
+         *    第二块从0x100000(qemu、bochs)开始, 截至在0x1efffff(qemu) 或 0x1fdffff(bochs)
+         */
         if (!ok && from == AVAILABLE_MEMORY_FROM && p->type == 1) {
             ok = true;
 
@@ -41,8 +48,10 @@ void memory_init() {
             g_physical_memory.alloc_cursor = 0;
             g_physical_memory.pages_free = g_physical_memory.pages_total - g_physical_memory.pages_used;
 
+            g_physical_memory.map_len = (uint16 *) MEMORY_BITMAP_LEN_FROM;
             g_physical_memory.map = (uint8 *) MEMORY_BITMAP_FROM;
-            memset(g_physical_memory.map, 0, g_physical_memory.pages_total); // 清零
+            *g_physical_memory.map_len = (g_physical_memory.pages_total + 7) / 8; // 1个字节可以表示8个物理页的使用情况
+            memset(g_physical_memory.map, 0, *g_physical_memory.map_len); // 清零
         }
     }
 
@@ -65,17 +74,18 @@ void *alloc_page() {
         return NULL;
     }
     // 查找次数最多为总页数
-    for (uint index, i = 0; i < g_physical_memory.pages_total; i++) {
-        index = (g_physical_memory.alloc_cursor + i) % g_physical_memory.pages_total;
-        if (g_physical_memory.map[index]) {
-            continue;
+    for (uint cursor, index, i = 0; i < g_physical_memory.pages_total; i++) {
+        cursor = (g_physical_memory.alloc_cursor + i) % g_physical_memory.pages_total;
+        index = cursor / 8;
+        if (g_physical_memory.map[index] & (1 << cursor % 8)) {
+            continue; // 已分配
         }
-        // 可用页
-        g_physical_memory.map[index] = 1;
+        g_physical_memory.map[index] |= (1 << cursor % 8);
         g_physical_memory.pages_used++;
-        g_physical_memory.alloc_cursor = index;
-        void *p = (void *) (g_physical_memory.addr_start + (index << 12));
-        printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.pages_used);
+        g_physical_memory.alloc_cursor = cursor + 1;
+        void *p = (void *) (g_physical_memory.addr_start + (cursor << 12));
+        printk("[%s] alloc page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
+               g_physical_memory.map[index], g_physical_memory.pages_used);
         return p;
     }
     // 前面已经进行空间预测, 逻辑不会走到这里
@@ -93,21 +103,22 @@ void *alloc_pages(uint count, void **pages) {
         return NULL;
     }
     // 查找次数最多为总页数
-    for (uint index, found = 0, i = 0; i < g_physical_memory.pages_total; i++) {
-        index = (g_physical_memory.alloc_cursor + i) % g_physical_memory.pages_total;
-        if (g_physical_memory.map[index]) {
-            continue;
+    for (uint cursor, index, found = 0, i = 0; i < g_physical_memory.pages_total; i++) {
+        cursor = (g_physical_memory.alloc_cursor + i) % g_physical_memory.pages_total;
+        index = cursor / 8;
+        if (g_physical_memory.map[index] & (1 << cursor % 8)) {
+            continue; // 已分配
         }
         // 可用页
-        g_physical_memory.map[index] = 1;
+        g_physical_memory.map[index] |= (1 << cursor % 8);
         g_physical_memory.pages_used++;
-        pages[found] = (void *) (g_physical_memory.addr_start + (index << 12));
+        pages[found] = (void *) (g_physical_memory.addr_start + (cursor << 12));
         found++;
         if (found < count) {
             continue;
         }
         // 足量, 更新游标
-        g_physical_memory.alloc_cursor = index;
+        g_physical_memory.alloc_cursor = cursor + 1;
         printk("[%s] alloc %d pages: [ ", __FUNCTION__, count);
         if (count < 0x20) {
             for (int j = 0; j < count; ++j) printk("0x%x ", pages[j]);
@@ -128,8 +139,11 @@ void free_page(void *p) {
         return;
     }
 
-    int index = (int) (p - g_physical_memory.addr_start) >> 12;
-    g_physical_memory.map[index] = 0;
+    int cursor = (int) (p - g_physical_memory.addr_start) >> 12;
+    int index = cursor / 8;
+    g_physical_memory.map[index] &= ~(1 << cursor % 8);
     g_physical_memory.pages_used--;
-    printk("[%s] free page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.pages_used);
+
+    printk("[%s] free page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
+           g_physical_memory.map[index], g_physical_memory.pages_used);
 }

@@ -19,9 +19,20 @@ void kernel_main(void) {
     printk("kernel inited!\n");
     STI
 
-    for (int i = 0; i < 100; ++i) {
-        printk("i = %d\n", i);
-    }
+
+    void *p1 = alloc_page();
+    void *p2 = alloc_page();
+    free_page(p1);
+    free_page(p2);
+    alloc_page();
+    alloc_page();
+    alloc_page();
+    alloc_page();
+    alloc_page();
+
+    BOCHS_DEBUG_MAGIC
+    BOCHS_DEBUG_MAGIC
+    BOCHS_DEBUG_MAGIC
 
     while (true);
 }

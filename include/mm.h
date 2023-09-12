@@ -29,7 +29,8 @@ typedef struct {
     uint pages_free;     // 机器物理内存还剩多少page
     uint pages_used;     // 机器物理内存用了多少page
     uint alloc_cursor;   // 内存分配游标
-    uint8 *map;          // 用位图记录使用情况，1B映射一个page
+    uint16 *map_len;     // 记录位图最大使用长度，理论最大值为4G>>12>>8，即4096，但实际4G物理空间不会全可用
+    uint8 *map;          // 用位图记录使用情况，1bit映射一个page
 } physical_memory_alloc_t;
 
 
