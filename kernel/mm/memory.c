@@ -12,7 +12,7 @@
 #define AVAILABLE_MEMORY_FROM 0x100000 // 1M以上作为有效内存
 
 #define MEMORY_BITMAP_LEN_FROM 0x10000 // 内存分配对应位图长度的存储地址
-#define MEMORY_BITMAP_FROM 0x10002     // 内存分配对应的位图存储起始地址
+#define MEMORY_BITMAP_FROM 0x10004     // 内存分配对应的位图存储起始地址
 
 physical_memory_alloc_t g_physical_memory;
 
@@ -48,7 +48,7 @@ void memory_init() {
             g_physical_memory.alloc_cursor = 0;
             g_physical_memory.pages_free = g_physical_memory.pages_total - g_physical_memory.pages_used;
 
-            g_physical_memory.map_len = (uint16 *) MEMORY_BITMAP_LEN_FROM;
+            g_physical_memory.map_len = (uint32 *) MEMORY_BITMAP_LEN_FROM;
             g_physical_memory.map = (uint8 *) MEMORY_BITMAP_FROM;
             *g_physical_memory.map_len = (g_physical_memory.pages_total + 7) / 8; // 1个字节可以表示8个物理页的使用情况
             memset(g_physical_memory.map, 0, *g_physical_memory.map_len); // 清零
