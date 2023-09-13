@@ -5,6 +5,7 @@
 #include "../include/dt.h"
 #include "../include/print.h"
 #include "../include/pic.h"
+#include "../include/types.h"
 
 /*
  -----------------------------------------------------------------------------------------------------------------
@@ -238,7 +239,7 @@ void interrupt_handler_callback(int idt_index, int edi, int esi, int ebp, int es
         interrupt_handler_pic(idt_index, edi, esi, ebp, esp, ebx, edx, ecx, eax, eip, cs, eflags);
         return;
     }
-    // 其他中断，基本都称之为异常
+    // 其他中断，基本都称之为异常 exception (参考 README.md )
     printk("\n============================\n");
     printk("INTERRUPT : \n");
     printk("   VECTOR : 0x%02X\n", idt_index);
@@ -247,4 +248,6 @@ void interrupt_handler_callback(int idt_index, int edi, int esi, int ebp, int es
     printk("      EIP : 0x%08X\n", eip);
     printk("      ESP : 0x%08X\n", esp);
     printk("============================\n");
+
+    while (true);
 }

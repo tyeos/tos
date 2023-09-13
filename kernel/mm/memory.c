@@ -64,6 +64,7 @@ void memory_init() {
            g_physical_memory.addr_start, g_physical_memory.addr_end);
 }
 
+// 分配可用物理页
 void *alloc_page() {
     if (g_physical_memory.addr_start != AVAILABLE_MEMORY_FROM) {
         printk("[%s] no memory available!\n", __FUNCTION__);
@@ -93,6 +94,7 @@ void *alloc_page() {
     return NULL;
 }
 
+// 批量分配可用物理页
 void *alloc_pages(uint count, void **pages) {
     if (g_physical_memory.addr_start != AVAILABLE_MEMORY_FROM || count < 1) {
         printk("[%s] no memory available!\n", __FUNCTION__);
@@ -133,6 +135,7 @@ void *alloc_pages(uint count, void **pages) {
     return NULL;
 }
 
+// 释放物理页
 void free_page(void *p) {
     if ((uint) p < g_physical_memory.addr_start || (uint) p > g_physical_memory.addr_end) {
         printk("[%s] invalid address!\n", __FUNCTION__);

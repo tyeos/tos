@@ -11,7 +11,7 @@
 void kernel_main(void) {
     console_clear();
     memory_init();
-    virtual_memory_init(); // 开启分页, 使用虚拟内存地址
+    // virtual_memory_init(); // 开启分页, 使用虚拟内存地址
 
     gdt_init();
     idt_init();
@@ -19,16 +19,17 @@ void kernel_main(void) {
     printk("kernel inited!\n");
     STI
 
+    void* p1 = malloc(1);
+    void* p2 = malloc(100);
+    void* p3 = malloc(3);
+    printk("malloc p1 = 0x%p\n", p1);
+    printk("malloc p2 = 0x%p\n", p2);
+    printk("malloc p3 = 0x%p\n", p3);
 
-    void *p1 = alloc_page();
-    void *p2 = alloc_page();
-    free_page(p1);
-    free_page(p2);
-    alloc_page();
-    alloc_page();
-    alloc_page();
-    alloc_page();
-    alloc_page();
+    free_s(p1, 1);
+    free(p2);
+    free(p3);
+
 
     BOCHS_DEBUG_MAGIC
     BOCHS_DEBUG_MAGIC
