@@ -65,7 +65,8 @@ void gdt_page_model_fix() {
     p->limit_high >>= 2;
 
     // 栈段, 基址从 0x0 改为 0xC0000000, 界限从 0x0 改为 1G>>12
-    // 不用管esp，因为栈段中存放的是基址是虚拟地址，对应的真实的物理就是在低1M内存，而esp中存放的是真实的物理偏移量
+    // 不用管esp，因为栈段中存放的是基址是虚拟地址，对应的真实的物理就是在低1M内存，而esp中存放的是基于ss栈段的真实物理偏移量
+    // 或者 ss:esp 组合才是真正的栈顶, 即只要组合值是栈顶值就行, 栈段的虚拟地址在3GB以上, 那实际上栈顶 ss:esp 的虚拟地址也是在3GB以上
     p = (global_descriptor *) &gdt[GDT_STACK_INDEX];
     p->base_high = 0xc0;
     int limit = (1 << 30 >> 12) - 1;

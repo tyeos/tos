@@ -6,13 +6,13 @@
 #include "../../include/print.h"
 #include "../../include/string.h"
 
-#define ARDS_TIMES_ADDR 0x1100
-#define ARDS_BUFFER_ADDR 0x1102
+#define ARDS_TIMES_ADDR 0xE00
+#define ARDS_BUFFER_ADDR 0x1000
 
 #define AVAILABLE_MEMORY_FROM 0x100000 // 1M以上作为有效内存
 
-#define MEMORY_BITMAP_LEN_FROM 0x10000 // 内存分配对应位图长度的存储地址
-#define MEMORY_BITMAP_FROM 0x10004     // 内存分配对应的位图存储起始地址
+#define MEMORY_BITMAP_LEN_FROM 0xE10   // 内存分配对应位图长度的存储地址
+#define MEMORY_BITMAP_FROM 0x10000     // 内存分配对应的位图存储起始地址
 
 physical_memory_alloc_t g_physical_memory;
 

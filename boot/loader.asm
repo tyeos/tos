@@ -242,8 +242,8 @@ HEAD_SECTOR_START equ 5
 HEAD_SECTOR_NUM equ 60
 
 ; 用于存储内存检测的数据
-ARDS_TIMES_BUFFER equ 0x1100 ; 最终检测次数存放地址，占2字节
-ARDS_BUFFER equ 0x1102 ; 每次检测返回的ARDS占用20个字节的情况下，第N段ARDS的起始位置为: 0x1102 + N * 0x14
+ARDS_TIMES_SAVE_ADDR equ 0xE00 ; 最终检测次数存放地址，占2字节
+ARDS_BUFFER equ 0x1000 ; 每次检测返回的ARDS占用20个字节的情况下，第N段ARDS的起始位置为: 0x1000 + N * 0x14
 ARDS_TIMES dw 0 ; 临时检测次数
 
 CHECK_BUFFER_OFFSET dw 0 ; 存储填充以后的offset，下次检测的结果接着写
@@ -283,7 +283,7 @@ loader_start:
 ; 子功能0xE820的强大之处是返回的内存信息较丰富，包括多个属性字段，所以需要一种格式结构来组织这些数据。
 ; 内存信息的内容是用地址范围描述符来描述的，用于存储这种描述符的结构称之为地址范围描述符(Address Range Descriptor Structure, ARDS)。
 ;
-; ARDS格式：
+; 地址范围描述符(Address Range Descriptor Structure, ARDS)格式：
 ;     ------------------------------------------------------------
 ;     | byte offset | attribute name | describe                  |
 ;     ------------------------------------------------------------
@@ -344,14 +344,12 @@ memory_check:
     jne .loop
 
     mov ax, [ARDS_TIMES]            ; 保存内存检测次数
-    mov [ARDS_TIMES_BUFFER], ax
+    mov [ARDS_TIMES_SAVE_ADDR], ax
     mov [CHECK_BUFFER_OFFSET], di   ; 保存offset
 
 .memory_check_success:
     mov si, memory_check_success_msg
     call print
-
-    xchg bx, bx
 
     ; ------------------------------------------------------------------------------------------------------
     ; -----------------------------------------   准备进入保护模式   ------------------------------------------
