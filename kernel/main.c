@@ -20,31 +20,38 @@ void kernel_main(void) {
     STI
 
 
-    int pde_index = 0x305;
-    int pte_index = 2;
-    int offset = 16;
-    int *vp = (int *) ((pde_index << 22) | (pte_index << 12) | offset);
-    check_create_virtual_page(pde_index,pte_index);
-    printk("vp = 0x%p\n", vp);
-    *vp = 10;
+    // 按页申请内存
+    void* p1 = alloc_page();
+    printk("malloc p1 = 0x%p\n", p1);
+    void* p2 = alloc_page();
+    printk("malloc p2 = 0x%p\n", p2);
+    void* p3 = alloc_page();
+    printk("malloc p3 = 0x%p\n", p3);
+    *(int*)p1 = 10;
+    *(int*)p2 = 11;
+    *(int*)p3 = 12;
+    BOCHS_DEBUG_MAGIC
 
-
-//    int* a = ( int* )get_virtual_addr();
-//    *a = 10;
-//    printk("malloc a = 0x%p\n", *a);
-//    void* p1 = malloc(1);
-//    void* p2 = malloc(100);
-//    void* p3 = malloc(3);
-//    printk("malloc p1 = 0x%p\n", p1);
-//    printk("malloc p2 = 0x%p\n", p2);
-//    printk("malloc p3 = 0x%p\n", p3);
-//
-//    free_s(p1, 1);
-//    free(p2);
-//    free(p3);
-
+    free_page(p1);
+    free_page(p3);
+    free_page(p2);
 
     BOCHS_DEBUG_MAGIC
+
+    // 按字节申请内存
+    p1 = malloc(1);
+    p2 = malloc(100);
+    p3 = malloc(3);
+    printk("malloc p1 = 0x%p\n", p1);
+    printk("malloc p2 = 0x%p\n", p2);
+    printk("malloc p3 = 0x%p\n", p3);
+
+    BOCHS_DEBUG_MAGIC
+
+    free_s(p1, 1);
+    free(p2);
+    free(p3);
+
     BOCHS_DEBUG_MAGIC
     BOCHS_DEBUG_MAGIC
 

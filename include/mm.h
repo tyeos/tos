@@ -36,6 +36,35 @@ typedef struct {
 } physical_memory_alloc_t;
 
 
+typedef struct {
+    uint kernel_addr_start;     // 内核虚拟内存分配的起始地址
+    uint kernel_max_available_size; // 内核最大可分配的虚拟内存大小
+    uint kernel_addr_max_end;       // 内核虚拟内存分配的最大结束地址
+    uint kernel_max_pages; // 内核虚拟内存最多可以有多少page
+    uint kernel_alloc_cursor;   // 内核虚拟内存分配游标
+
+    uint user_addr_start;       // 用户虚拟内存分配的起始地址
+    uint user_max_available_size;   // 用户最大可分配的虚拟内存大小
+    uint user_addr_max_end;         // 用户虚拟内存分配的最大结束地址
+    uint user_max_pages; // 用户虚拟内存最多可以有多少page
+    uint user_alloc_cursor;     // 用户虚拟内存分配游标
+
+    uint pages_used;            // 虚拟内存已经分配了多少page（用户+内核）
+
+    uint32 *kernel_map_len;     // 内核位图占用的字节长度
+    uint32 *user_map_len;       // 用户位图占用的字节长度
+
+    uint8 *kernel_map;          // 内核位图，记录内存使用情况，1bit映射一个page, 1byte映射8个page
+    uint8 *user_map;            // 用户位图，记录内存使用情况，1bit映射一个page, 1byte映射8个page
+
+} virtual_memory_alloc_t;
+
+// 内存池标记，用于判断用哪个内存池
+enum pool_flags {
+    PF_KERNEL = 1,  //内核内存池
+    PF_USER = 2     //用户内存池
+};
+
 void memory_init();
 void virtual_memory_init();
 
@@ -43,17 +72,14 @@ uint get_cr3();
 void set_cr3(uint v);
 void enable_page();
 
-// 按页分配、释放物理内存
+// 分配、释放内存页(虚拟地址)
 void *alloc_page();
-void *alloc_pages(uint count, void **pages);
 void free_page(void *p);
 
-// 按字节分配、释放物理内存
+// 按字节分配、释放内存
 void *malloc(size_t size);
 void free_s(void *obj, int size);
 #define free(x) free_s((x), 0)
 
-// 虚拟地址相关接口
-void check_create_virtual_page(int pde_index, int pte_index);
 
 #endif //TOS_MM_H
