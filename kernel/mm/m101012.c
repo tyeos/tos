@@ -148,6 +148,8 @@
      若为全局页，该页将在高速缓存TLB中一直保存，给出虚拟地址直接就出物理地址，无需那三步骤转换。
      由于TLB容量比较小（一般速度较快的存储设备容量都比较小)，所以这里面就存放使用频率较高的页面。
      清空TLB有两种方式，一是用invlpg指令针对单独虚拟地址条目清理，或者是重新加载cr3寄存器，这将直接清空TLB。
+        TLB中存放的就是 虚拟地址的高20位 到 页表项物理地址 的映射关系。
+        单条目清理指令示例：invlpg [0xC00FF000]; 中括号中的0xC00FF000为虚拟地址。
  AVL:
      意为Available位，表示可用，即软件，操作系统可用该位，CPU不理会该位的值。
 
@@ -157,6 +159,7 @@
 
 #include "../../include/mm.h"
 #include "../../include/string.h"
+#include "../../include/print.h"
 
 #define PAGE_ATTR_US_RW_P 0b111 // 页属性，US=1, RW=1, P=1
 
@@ -183,10 +186,14 @@ void virtual_memory_init() {
     pdt[0x300] = pdt[0];
 
     // 创建页表项：每个页目录项(pde)对应一个页表，每个页表有1024个页表项，一个页表对应4MB物理地址空间
-    // 这里仅创建前256个, 即映射到低1MB物理地址空间（0x0~0xFFFFF），剩余3MB(0x100000~0x3FFFFF)在该页表中保留不用
+    // 这里仅创建前256个, 即映射到低1MB物理地址空间（0x0~0xFFFFF），剩余3MB(0x100000~0x3FFFFF)在该页表中保留
     for (int i = 0; i < 0x100; i++) {
         pt[i] = (i << 12) | PAGE_ATTR_US_RW_P;
     }
+
+    // 将第1023个页表项作为特殊之用，通过其值的动态更改从而访问任意指定的4K物理空间。
+    // 方式就是先通过虚拟地址0xFFF00FFC修改这个页表项的高20位(存放物理基址)，然后在通过虚拟地址0xC03FF000~0xC03FFFFF即可访问。
+    pt[0x3FF] = pt[0x3FF] | 0b011; // 初始将其指向自己，且只US位设为Supervisor，该页表项不允许用户级别使用
 
     // 将最后一个页目录项指向指向页目录表自己的地址，目的是为了以后动态操作页表
     pdt[0x3FF] = (int) pdt | PAGE_ATTR_US_RW_P;
@@ -198,32 +205,51 @@ void virtual_memory_init() {
      *    0xFFC00000~0xFFC00FFF => 0x00101000~0x00101FFF : 第1023个页目录项(内核最后1个页表)的第0个页表项
      *    0xFFF00000~0xFFF00FFF => 0x00101000~0x00101FFF : 第1023个页目录项(内核最后1个页表)的第768个页表项
      *    0xFFFFF000~0xFFFFFFFF => 0x00100000~0x00100FFF : 第1023个页目录项(内核最后1个页表)的第1023个页表项
+     *
+     *    0x003FF000~0x003FFFFF => 0x00000000~0x00000FFF : 第0个页目录项(即用户空间的第0个页表)的第1023个页表项
+     *    0xC03FF000~0xC03FFFFF => 0x00000000~0x00000FFF : 第768个页目录项(即内核空间的第0个页表)的第1023个页表项
+     *
+     * 其他页表和页目录项动态创建
      */
-
-    // 创建页目录项（高1GB的内核虚拟地址空间）, 即第0x301~0x3FE项, 共254个
-    for (int i = 0x301; i < 0x3FF; i++) {
-        // 注: 每一个页表项都要对应4kB的物理空间, 即一个页表对应4MB的物理空间, 所以一个标准页表应该申请 4KB + 4MB 的物理空间
-
-        // 分配页表地址
-        int *pt = (int *) alloc_page(); // 0x301页表的物理地址0x102000
-        // 更新页目录项中存放页表信息
-        pdt[i] = (int) pt | PAGE_ATTR_US_RW_P;
-
-        // 申请 4KB * 1024 大小的空间, 即一个页表对应的4MB物理地址空间
-        // 每个页目录项(pde)对应一个页表，每个页表有1024个页表项(pte)
-        void *pte_pages[0x400] = {0};
-        alloc_pages(0x400, pte_pages); // 0x301页表项存储数据的物理地址范围0x103000~0x502FFF
-
-        // 分配页表项地址
-        for (int j = 0; j < 0x400; ++j) {
-            // 每个页表项对应一个4K大小的物理地址，每个目录项(页表)可表示的4M大小物理地址
-            pt[j] = (int) pte_pages[j] | PAGE_ATTR_US_RW_P;
-        }
-
-        break; // 此行为临时代码, 先只创建一个额外的页表测试, 其他的先不管
-    }
 
     set_cr3((uint) pdt);
     enable_page();
+}
+
+// 检查创建对应虚拟地址的物理页
+void check_create_virtual_page(int pde_index, int pte_index) {
+    /*
+     * 先通过虚拟地址0xFFF00FFC修改第0个页表的第1023个页表项的高20位(存放物理基址)，
+     * 然后在通过虚拟地址0xC03FF000~0xC03FFFFF即可访问任意4K物理地址空间。
+     * Dynamically accessing physical addresses through dynamic virtual addresses
+     */
+    int *dynamic = (int *) 0xFFF00FFC;
+
+    // 1，检查页目录项，看页表状态
+    // 1.1，目录项未初始化，则新建页表，将目录项映射到空的4K页表
+    // 通过虚拟地址0xFFFFF000~0xFFFFFFFF可访问物理地址0x100000~0x100FFF，即页表
+    int *pdt_virtual = (int *) 0xFFFFF000;
+    int *pde_virtual = pdt_virtual + pde_index;
+    if (!(*pde_virtual & 0x1)) { // 检查P位
+        int *pt = alloc_page();
+
+        // 申请4K物理空间，并初始化（物理地址不能直接访问，必须通过虚拟地址）
+        *dynamic = (int) pt | (*dynamic & 0xFFF);  // 仅修改高20位的值
+        memset((char *) 0xC03FF000, 0, 0x400);
+
+        // 将页目录项和页表关联
+        *pde_virtual = (int) pt | PAGE_ATTR_US_RW_P;
+    }
+
+    // 2，检查页表中的页表项状态
+    // 2.2，页表项不存在，则新建页表项，将其映射到4K真实物理地址
+    int *pdt = (int *) 0x100000;
+    *dynamic = (int) (pdt + pde_index);
+    int *pte_virtual = (int *) 0xC03FF000 + pte_index;
+    if (!(*pte_virtual & 0x1)) { // 检查P位
+        int *page = alloc_page();
+        *pte_virtual = (int) page | PAGE_ATTR_US_RW_P;// 关联数据页
+    }
+
 }
 

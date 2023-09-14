@@ -53,4 +53,7 @@ void *malloc(size_t size);
 void free_s(void *obj, int size);
 #define free(x) free_s((x), 0)
 
+// 虚拟地址相关接口
+void check_create_virtual_page(int pde_index, int pte_index);
+
 #endif //TOS_MM_H
