@@ -32,5 +32,7 @@ chain_t *read_item(circular_chain_t *list);
 // 删除item, 并返回删除成功的元素
 chain_t *remove_item(circular_chain_t *list, chain_t *item) ;
 
+// 通过item中的value删除item, 并返回删除成功的元素
+chain_t *remove_item_by_value(circular_chain_t *list, void *item_value);
 
 #endif //TOS_CHAIN_H

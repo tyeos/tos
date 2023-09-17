@@ -6,6 +6,7 @@
 #include "../include/print.h"
 #include "../include/pic.h"
 #include "../include/types.h"
+#include "../include/sys.h"
 
 /*
  -----------------------------------------------------------------------------------------------------------------
@@ -207,6 +208,7 @@ interrupt_gate idt[IDT_SIZE] = {0};
 dt_ptr idt_ptr;
 
 extern int interrupt_handler_table[0x2f]; // 地址在汇编中定义
+extern void interrupt_handler_clock(); // 函数汇编中定义
 
 void idt_init() {
 
@@ -214,6 +216,7 @@ void idt_init() {
         interrupt_gate *p = &idt[i];
 
         int handler = interrupt_handler_table[i];
+        if (i == 0x20) handler = (int) interrupt_handler_clock;
 
         p->offset0 = handler & 0xffff;
         p->offset1 = (handler >> 16) & 0xffff; // 设置中断处理函数

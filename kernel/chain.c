@@ -71,3 +71,34 @@ chain_t *remove_item(circular_chain_t *list, chain_t *item) {
     }
     return NULL;// 未找到
 }
+
+chain_t *remove_item_by_value(circular_chain_t *list, void *item_value) {
+    if (list->size == 1) {
+        if (item_value == list->current->value) {
+            list->current = NULL;
+            list->size = 0;
+            return list->current;
+        }
+        return NULL;
+    }
+
+    chain_t *item;
+    for (int i = 0; i < list->size; ++i) {
+        item = read_item(list);
+        if (item->value != item_value) {
+            continue;
+        }
+        // 前面的元素
+        item->previous->next = item->next;
+        // 后面的元素
+        item->next->previous = item->previous;
+        // 当前item
+        if (item == list->current) {
+            list->current = item->previous;
+        }
+
+        list->size--;
+        return item;
+    }
+    return NULL;// 未找到
+}

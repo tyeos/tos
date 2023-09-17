@@ -4,6 +4,7 @@
 
 #include "../../include/print.h"
 #include "../../include/bridge/io.h"
+#include "../../include/sched.h"
 
 /*
   ----------------------------------------------------------------------------------------------------------------------
@@ -88,5 +89,5 @@ void clock_init() {
 }
 
 void clock_interrupt_handler() {
-    printk("clock interrupt!\n");
+    sched();
 }
