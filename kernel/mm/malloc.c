@@ -4,7 +4,7 @@
 
 
 #include "../../include/mm.h"
-#include "../../include/bridge/sys.h"
+#include "../../include/sys.h"
 #include "../../include/print.h"
 
 

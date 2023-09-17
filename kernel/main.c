@@ -5,7 +5,7 @@
 #include "../include/console.h"
 #include "../include/print.h"
 #include "../include/init.h"
-#include "../include/bridge/sys.h"
+#include "../include/sys.h"
 #include "../include/mm.h"
 
 void kernel_main(void) {
