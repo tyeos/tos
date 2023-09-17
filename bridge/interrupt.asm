@@ -23,13 +23,18 @@ extern interrupt_handler_callback
 ; 参数:
 ;   1：idt_index
 ; -------------------------------------------------
+; 在进入中断之前，cpu会向栈中压入三个值：
+;   push eflags
+;   push cs
+;   push eip
+; -------------------------------------------------
 %macro INTERRUPT_HANDLER 1
 global interrupt_handler_%1
 interrupt_handler_%1:
 
     pushad ; 保存现场，把eax、ecx、edx、ebx、esp、ebp、esi、edi依次压入栈中，ESP会减少32
 
-    push %1
+    push %1 ; 压入idt_index, 即中断号
     call interrupt_handler_callback ; 回调给C
     add esp, 4
 
