@@ -7,6 +7,16 @@
 
 #include "types.h"
 
+/*
+ * 该状态为标记是否启用虚拟地址101012分页模式
+ * 注:
+ *     使用虚拟地址无法进行bochs下的的gdb汇编调试, 包括从汇编回调C代码的调试,
+ *     如修改该状态值, 需要重新编译所有相关文件, 简单的方式就是clean一下build目录,
+ *     因为该值非动态, 编译器在编译其他文件时会直接优化为最终逻辑代码,
+ *     而目前本Makefile脚本中使用的方式为, 未修改的文件不会进行重新编译.
+ */
+#define VIRTUAL_MODEL true
+
 #define PAGE_SIZE 4096
 
 typedef struct {

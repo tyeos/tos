@@ -55,5 +55,7 @@ void kernel_main(void) {
     BOCHS_DEBUG_MAGIC
     BOCHS_DEBUG_MAGIC
 
-    while (true);
+    while (true) {
+        HLT
+    }
 }
