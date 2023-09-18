@@ -13,11 +13,8 @@ extern int vsprintf(char *buf, const char *fmt, va_list args);
 
 int printk(const char * fmt, ...) {
     // 如果响应中断, 则临时关闭
-    uint32 flags = get_eflags();
-    bool ack_int = flags & 0x200;
-    if (ack_int) {
-        CLI
-    }
+    bool ack_int = get_if_flag();
+    if (ack_int) CLI
 
     // 处理参数并输出信息到控制台
     va_list args;
@@ -28,8 +25,7 @@ int printk(const char * fmt, ...) {
     console_write(buf, size);
 
     // 如果之前响应中断, 则恢复
-    if (ack_int) {
-        STI
-    }
+    if (ack_int) STI
+
     return size;
 }

@@ -62,3 +62,16 @@ set_eflags:
     popfd
     leave
     ret
+
+; -----------------------
+; 获取IF标志位
+; -----------------------
+; al = get_if_flag()
+; -----------------------
+global get_if_flag
+get_if_flag:
+    pushfd
+    pop eax
+    shr eax, 9
+    and eax, 1
+    ret
