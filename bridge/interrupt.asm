@@ -33,11 +33,30 @@ global interrupt_handler_%1
 interrupt_handler_%1:
 
     pushad ; 保存现场，把eax、ecx、edx、ebx、esp、ebp、esi、edi依次压入栈中，ESP会减少32
-
     push %1 ; 压入idt_index, 即中断号
-    call interrupt_handler_callback ; 回调给C
-    add esp, 4
 
+    ; ----------------------------------------------------------------------
+    ; 至此，栈结构为：
+    ; ----------------------------------------------------------------------
+    ; 注：以下栈结构中存放的是进入中断程序前的程序的值，
+    ;     如其中的cs:eip就是在使用iret指令返回时，程序继续执行的位置
+    ; ----------------------------------------------------------------------
+    ;     idt_index    ↑ 低地址（ <-esp 当前栈顶）
+    ;     edi          |
+    ;     esi          |
+    ;     ebp          |
+    ;     esp          |
+    ;     ebx          ↑ （栈的增长方向）
+    ;     edx          |
+    ;     ecx          |
+    ;     eax          |
+    ;     eip          |
+    ;     cs           |
+    ;     eflags       ↑ 高地址
+    ; ----------------------------------------------------------------------
+    call interrupt_handler_callback ; 回调给C
+
+    add esp, 4
     popad ; 恢复现场，将栈中数据弹出，依次传给edi、esi、ebp、esp、ebx、edx、ecx、eax，ESP会增加32
 
     iret
