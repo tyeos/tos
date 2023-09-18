@@ -1,33 +1,47 @@
 [SECTION .text]
 [bits 32]
 
-extern current
-extern clock_interrupt_handler
+extern current_task ; 在c中定义，当前任务
+extern clock_task_scheduler ; 在c中定义，任务调度程序
 
 ; -------------------------------------------------
 ; 时钟中断处理函数
 ; -------------------------------------------------
-; 在进入中断之前，cpu会向栈中压入三个值：
-;   push eflags
-;   push cs
-;   push eip
-; -------------------------------------------------
+; 初始栈结构（摘自 interrupt.asm）:
+; ---------------------------------------------------------------------------------------
+;     eip          ↑ 低地址（ <-esp 当前栈顶）
+;     cs           ↑
+;     eflags       ↑ （栈的增长方向）
+;     (esp)        ↑ 注：从这里开始往下 ↓ 是发生特权级栈切换时额外压入的两个值
+;     (ss)         ↑ 高地址
+; ---------------------------------------------------------------------------------------
 global interrupt_handler_clock
 interrupt_handler_clock:
 
+    ; 看当前有没有调度的任务
     push ecx
-    mov ecx, [current]
+    mov ecx, [current_task]
     cmp ecx, 0
-    je .pop_ecx
+    je .skip_store_env ; 无需保存上下文环境
 
 .store_env:
-    ; 以下赋值参考 tss_t 定义
-    mov [ecx + 10 * 4], eax
-    mov [ecx + 12 * 4], edx
-    mov [ecx + 13 * 4], ebx
-    mov [ecx + 15 * 4], ebp
-    mov [ecx + 16 * 4], esi
+
+    ; -------------------------------------------------------------------
+    ; 保存原程序环境，即：初始栈中的寄存器+通用寄存器(pushad)
+    ; 保存到 current_task 的 tss 结构中，参考 task.h 的 tss_t 结构定义
+    ; -------------------------------------------------------------------
+    ; 中断栈结构和pushad结构参考 interrupt.asm 中的中断定义
+    ; -------------------------------------------------------------------
+
+    ; 依次保存
     mov [ecx + 17 * 4], edi
+    mov [ecx + 16 * 4], esi
+    mov [ecx + 15 * 4], ebp
+    ; mov [eax + 14 * 4], esp
+    mov [ecx + 13 * 4], ebx
+    mov [ecx + 12 * 4], edx
+    ; mov [ecx + 11 * 4], ecx
+    mov [ecx + 10 * 4], eax
 
     ; eip
     mov eax, [esp + 4]
@@ -41,17 +55,22 @@ interrupt_handler_clock:
     mov eax, [esp + 0x0C]
     mov [ecx + 9 * 4], eax
 
-    ; ecx
+    ; 用eax把ecx换下来
     mov eax, ecx
-    pop ecx
+    pop ecx ; 恢复 ecx 和 esp
     mov [eax + 11 * 4], ecx
-    jmp .call_handler
+    mov [eax + 14 * 4], esp
 
-.pop_ecx:
+    ; 恢复eax
+    mov eax, [ecx + 10 * 4]
+
+    jmp .start_scheduler
+
+.skip_store_env:
     pop ecx
 
-.call_handler:
-    call clock_interrupt_handler
+.start_scheduler: ; 下一步, 开始调度
+    call clock_task_scheduler
 
     iret
 

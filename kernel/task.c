@@ -10,22 +10,22 @@
 #include "../include/string.h"
 
 
-circular_chain_t *tasks;
 bitmap_t *pids;
-extern task_t *current;
+
+circular_chain_t *tasks;
+extern task_t *current_task;
 
 
+// 任务执行完成，退出任务
 void exit_current_task() {
-    if (current == NULL) return;
-    remove_item_by_value(tasks, current);
-    free_bit(pids, current->pid);
-    free_page(current);
-    printk("free task %p\n", current);
-    current = NULL;
+    remove_item_by_value(tasks, current_task);
+    free_bit(pids, current_task->pid);
+    free_page(current_task);
+    printk("exit task %p\n", current_task);
+    current_task = NULL;
 }
 
 task_t *create_task(task_func_t func) {
-
     // 创建任务
     task_t *task = alloc_page();
     memset(task, 0, PAGE_SIZE);
@@ -43,19 +43,15 @@ task_t *create_task(task_func_t func) {
     return task;
 }
 
-int get_sched_times(task_t *task) {
-    return task->sched_times++;
-}
-
 void *task_func_test1(void *args) {
-    for (int i = 0; i < 1000; ++i) {
-        printk("A %d ", i);
+    for (int i = 0; i < 10000; ++i) {
+        printk("A %d \n", i);
     }
     return 0;
 }
 
 void *task_func_test2(void *args) {
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 10000; ++i) {
         printk("B %d ", i++);
     }
     return 0;

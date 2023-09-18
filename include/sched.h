@@ -5,6 +5,6 @@
 #ifndef TOS_SCHED_H
 #define TOS_SCHED_H
 
-void sched();
+void clock_task_scheduler();
 
 #endif //TOS_SCHED_H

@@ -8,19 +8,17 @@
 #include "../include/chain.h"
 
 
-extern void switch_task(task_t *); // 在汇编中实现
+extern void processing_task(task_t *); // 在汇编中实现
 
 extern circular_chain_t *tasks;;
+task_t *current_task = NULL;
 
-task_t *current = NULL;
-
-task_t *next_ready_task() {
+task_t *get_next_ready_task() {
     if (tasks == NULL) {
         return NULL;
     }
 
-    task_t * next = NULL;
-
+    task_t *next = NULL;
     for (int i = 0; i < tasks->size; ++i) {
         task_t *task = read_item(tasks)->value;
         if (task->state != TASK_READY) continue;
@@ -31,21 +29,19 @@ task_t *next_ready_task() {
     return next;
 }
 
-void sched() {
-    STI
-    if (current != NULL) {
-        current->state = TASK_READY;
+void clock_task_scheduler() {
+    // 当前任务置为就绪状态
+    if (current_task != NULL) {
+        current_task->state = TASK_READY;
     }
 
-    current = next_ready_task();
-    if (current != NULL) {
-        current->state = TASK_RUNNING;
-    }
-
-    if (current == NULL) {
+    // 换下一个任务
+    current_task = get_next_ready_task();
+    if (current_task == NULL) {
         return;
     }
 
-    printk("sched2---\n");
-    switch_task(current);
+    printk("clock_task_scheduler once ===================================== \n");
+    current_task->state = TASK_RUNNING;
+    processing_task(current_task);
 }

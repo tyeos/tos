@@ -54,15 +54,15 @@ typedef struct tss_t {
     uint16 reversed: 15;    // index=25, 保留不用
     uint16 iobase;          // index=25(高2字节), I/O 位图基地址，16 位从 TSS 到 IO 权限位图的偏移
     uint32 ssp;             // index=26, 任务影子栈指针
-} __attribute__((packed)) tss_t;
+} __attribute__((packed)) tss_t; // 固定 27*4=108 字节
 
 
 typedef struct task_t {
     tss_t tss;          // 上下文
     int pid;            // index=27
-    task_func_t func;   // index=28
-    task_state_t state;
-    uint sched_times;
+    task_func_t func;   // index=28, 要执行的任务, 函数指针, 32位模式下占4字节
+    task_state_t state; // index=29, enum占4字节
+    uint sched_times;   // index=30, 总调度次数
 } task_t;
 
 //typedef union task_union_t {

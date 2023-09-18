@@ -1,49 +1,69 @@
 [SECTION .text]
 [BITS 32]
 
+extern exit_current_task ; 在c中定义，退出任务
 
-extern current
-extern get_sched_times
-extern exit_current_task
+; ---------------------------------
+; 开始处理调度的任务
+; ---------------------------------
+; void processing_task(task_t *)
+; ---------------------------------
+global processing_task
+processing_task:
+    ; ---------------------------------------------------------------------------------------
+    ; 当前栈结构（C程序调用进来）
+    ; ---------------------------------------------------------------------------------------
+    ;     return addr  ↑ 低地址（ <-esp 当前栈顶）
+    ;     task_t *     ↑ 高地址
+    ; ---------------------------------------------------------------------------------------
 
-; stack struct:
-;   return address
-;   param
-global switch_task
-switch_task:
-    mov ecx, [esp + 8] ; task
+    ; eax一般作为函数返回值，可以不用保存
+    mov eax, [esp + 4] ; task
 
+    ; 检查是否首次调度先
+    push ecx ; 先保存
+    mov ecx, [eax + 30 * 4] ; 总调度次数
+    inc ecx
+    mov [eax + 30 * 4], ecx ; 先把调度次数加了
+    cmp ecx, 1
+    je .skip_recover_env ; 首次调度无需恢复上下文环境 （暂不考虑调度次数超过0xFFFFFFFF后归0的情况, 10ms一次归零也需要497天）
+
+.recover_env:
+    ; -------------------------------------------------------------------
+    ; 恢复上下文, 参考 interrupt_clock.asm 中的保存上下文
+    ; -------------------------------------------------------------------
+
+    mov edi, [eax + 17 * 4]
+    mov esi, [eax + 16 * 4]
+    mov ebp, [eax + 15 * 4]
+    mov esp, [eax + 14 * 4]
+    mov ebx, [eax + 13 * 4]
+    mov edx, [eax + 12 * 4]
+    ; mov ecx, [eax + 11 * 4]
+    ; mov eax, [eax + 10 * 4] ; eax 作为跳转使用，目前不做恢复
+
+.recover_run:
+    ; eflags
+    mov ecx, [eax + 9 * 4]
     push ecx
-    call get_sched_times
-    add esp, 4
+    popfd
 
-    cmp eax, 0
-    je .call
+    pop ecx ; 恢复ecx
 
-.restore_env:
-    ; 恢复上下文
-    mov ecx, [current]
+    ; eip (cs暂不考虑)
+    mov eax, [eax + 8 * 4]
+    jmp eax ; 跳转到eip处继续执行
 
-    ; 以下赋值参考 tss_t 定义
-    ; mov eax, [ecx + 10 * 4]
-    mov edx, [ecx + 12 * 4]
-    mov ebx, [ecx + 13 * 4]
-    mov esp, [ecx + 14 * 4]
-    mov ebp, [ecx + 15 * 4]
-    mov esi, [ecx + 16 * 4]
-    mov edi, [ecx + 17 * 4]
+    jmp .exit
 
-    mov eax, ecx
-    mov ecx, [eax + 11 * 4]
+.skip_recover_env:
+    pop ecx ; 恢复ecx
 
-    mov eax, [eax + 8 * 4]      ; eip
-    jmp eax
+.run_task: ; 新任务执行
+    mov eax, [eax + 28 * 4]
 
-.call:
-    mov ecx, [current]
-    mov eax, [ecx + 26*4 + 2*4]
+    sti
     call eax
-
 
 .exit:
     call exit_current_task

@@ -89,5 +89,6 @@ void clock_init() {
 }
 
 void clock_interrupt_handler() {
-    sched();
+    // 该函数已废弃
+    printk("clock interrupt!\n");
 }

@@ -40,7 +40,7 @@
 ; -----------------------
 ; 获取32位标志寄存器
 ; -----------------------
-; eax = get_eflags()
+; uint32 get_eflags()
 ; -----------------------
 global get_eflags
 get_eflags:
@@ -51,22 +51,19 @@ get_eflags:
 ; -----------------------
 ; 设置32位标志寄存器
 ; -----------------------
-; set_flags(uint32)
+; void set_flags(uint32)
 ; -----------------------
 global set_eflags
 set_eflags:
-    push ebp
-    mov ebp, esp
-    mov eax, [ebp + 8]
+    mov eax, [esp + 4]
     push eax
     popfd
-    leave
     ret
 
 ; -----------------------
 ; 获取IF标志位
 ; -----------------------
-; al = get_if_flag()
+; uint8 get_if_flag()
 ; -----------------------
 global get_if_flag
 get_if_flag:
