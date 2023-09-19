@@ -252,5 +252,9 @@ void interrupt_handler_callback(int idt_index, int edi, int esi, int ebp, int es
     printk("      ESP : 0x%08X\n", esp);
     printk("============================\n");
 
-    while (true);
+    while (true){
+        printk("ERROR STOP!\n");
+        CLI
+        HLT
+    }
 }
