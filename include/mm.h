@@ -82,9 +82,13 @@ uint get_cr3();
 void set_cr3(uint v);
 void enable_page();
 
-// 分配、释放内存页(虚拟地址)
+// 分配、释放内核内存页
 void *alloc_page();
 void free_page(void *p);
+
+// 分配、释放用户内存页
+void *alloc_upage();
+void free_upage(void *v);
 
 // 按字节分配、释放内存
 void *malloc(size_t size);

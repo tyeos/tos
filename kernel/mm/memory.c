@@ -354,12 +354,22 @@ static void _free_page(void *v, enum pool_flags pf) {
     vfree_page(v, pf);
 }
 
-// 分配虚拟页, 并自动挂载物理页
+// 分配一页内核内存（如果开启了虚拟内存，则返回虚拟地址，并自动挂载物理页）
 void *alloc_page() {
     return _alloc_page(PF_KERNEL); // 默认内核申请
 }
 
-// 释放虚拟页, 并解除和物理页的关联关系
+// 释放分配一页内核内存（如果开启了虚拟内存，则自动解除该虚拟地址和物理页的关联）
 void free_page(void *v) {
     _free_page(v, PF_KERNEL); // 默认内核申请
+}
+
+// 分配一页用户内存（如果开启了虚拟内存，则返回虚拟地址，并自动挂载物理页）
+void *alloc_upage() {
+    return _alloc_page(PF_USER); // 默认内核申请
+}
+
+// 释放分配一页用户内存（如果开启了虚拟内存，则自动解除该虚拟地址和物理页的关联）
+void free_upage(void *v) {
+    _free_page(v, PF_USER); // 默认内核申请
 }
