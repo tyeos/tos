@@ -29,7 +29,7 @@ void task_scheduler_ticks() {
         if (current_task->ticks > 0) {
             current_task->ticks--;
             current_task->elapsed_ticks++;
-            printk("clock_task_scheduler ticks ===================================== \n");
+            // printk("clock_task_scheduler ticks\n");
             return;
         }
         // 保存当前任务状态，置为就绪状态
@@ -47,7 +47,7 @@ void task_scheduler_ticks() {
         task->elapsed_ticks++;
         task->state = TASK_RUNNING;
         current_task = task;
-        printk("clock_task_scheduler once ===================================== \n");
+        // printk("clock_task_scheduler once\n");
         return;
     }
 }
@@ -111,28 +111,33 @@ static task_t *create_task(char *name, uint8 priority, task_func_t func) {
 }
 
 static void *task_test1(void *args) {
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 20; ++i) {
         printk("A======= %d\n", i);
+        HLT
+        HLT
     }
-    return 0;
+    return NULL;
 }
 
 static void *task_test2(void *args) {
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 10; ++i) {
         printk("B=============== %d\n", i);
+        HLT
+        HLT
     }
-    return 0;
+    return NULL;
 }
 
 static void *idle(void *args) {
     create_task("task A", 2, task_test1);
     create_task("task B", 2, task_test2);
 
-    for (int i = 0; ; ++i) {
-        printk("idle================================ %d\n", i);
-//        HLT
+    for (int i = 0;; ++i) {
+        printk("idle== %d\n", i);
+        HLT
+        HLT
     }
-    return 0;
+    return NULL;
 }
 
 void task_init() {
