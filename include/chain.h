@@ -7,32 +7,56 @@
 
 #include "types.h"
 
-// 双向链表
-typedef struct chain_t {
+// 链表元素
+typedef struct chain_elem_t {
+    struct chain_elem_t *prev; // previous 前驱节点
+    struct chain_elem_t *next; // 后继节点
     void *value;
-    struct chain_t *previous;
-    struct chain_t *next;
+} chain_elem_t;
+
+/*
+ 链表结构:
+              +--------chain------------size-------------------+
+     head <=> | elem_0 <=> elem_1 <=> elem_... <=> elem_n | <=> tail
+              +-------------------------------------------+
+ */
+typedef struct chain_t {
+    chain_elem_t *head; // 头部节点
+    chain_elem_t *tail; // 尾部节点
+    uint32 size; // 正在使用的链表长度
 } chain_t;
 
-// 双向环形链表
-typedef struct circular_chain_t {
-    size_t size; // 正在使用的链表长度
-    chain_t *current; // 正在使用的链表
-} circular_chain_t;
+// 初始化链表
+void chain_init(chain_t *chain);
 
-// 添加item到最后一个(即上一个)位置, 并返回添加成功的元素
-chain_t *put_last(circular_chain_t* list, chain_t *item);
+// 在某个元素前插入元素
+void chain_insert_before(chain_t *chain, chain_elem_t *target, chain_elem_t *elem);
 
-// 读下一个item, 并将cursor后移
-chain_t *next_item(circular_chain_t *list);
+// 在某个元素后插入元素
+void chain_insert_after(chain_t *chain, chain_elem_t *target, chain_elem_t *elem);
 
-// 读当前item, 并将cursor后移
-chain_t *read_item(circular_chain_t *list);
+// 往链表首部添加元素
+void chain_put_first(chain_t *chain, chain_elem_t *elem);
 
-// 删除item, 并返回删除成功的元素
-chain_t *remove_item(circular_chain_t *list, chain_t *item) ;
+// 往链表尾部添加元素
+void chain_put_last(chain_t *chain, chain_elem_t *elem);
 
-// 通过item中的value删除item, 并返回删除成功的元素
-chain_t *remove_item_by_value(circular_chain_t *list, void *item_value);
+// 弹出链表首部元素
+chain_elem_t *chain_pop_first(chain_t *chain);
+
+// 弹出链表尾部元素
+chain_elem_t *chain_pop_last(chain_t *chain);
+
+// 删除某个元素
+chain_elem_t *chain_remove(chain_t *chain, chain_elem_t *elem);
+
+// 链表中是否存在某个元素
+bool chain_exist(chain_t *chain, chain_elem_t *elem);
+
+// 返回链表长度
+uint32 chain_len(chain_t *chain);
+
+// 返回链表是否为空
+bool chain_empty(chain_t *chain);
 
 #endif //TOS_CHAIN_H

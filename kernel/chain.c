@@ -4,101 +4,122 @@
 
 #include "../include/chain.h"
 
-chain_t *put_last(circular_chain_t *list, chain_t *item) {
-    if (list->size == 0) {
-        list->current = item;
-        item->next = item;
-        item->previous = item;
-        list->size = 1;
-        return item;
-    }
-    // 上一个item的后面
-    list->current->previous->next = item;
-    // 新加入的item前后
-    item->previous = list->current->previous;
-    item->next = list->current;
-    // 当前item的前面
-    list->current->previous = item;
-
-    list->size++;
-    return item;
+// 添加首个元素
+void chain_init(chain_t *chain) {
+    /*
+        |ˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉ|
+        |        ↓ˉˉprevˉˉ↑         |
+        | NULL | head | tail | NULL |
+        |        ↓__next__↑         |
+        |___________________________|
+    */
+    chain->size = 0;
+    // 修改head前后项
+    chain->head->prev = NULL;
+    chain->head->next = chain->tail;
+    // 修改tail前后项
+    chain->tail->prev = chain->head;
+    chain->tail->next = NULL;
 }
 
-// 读下一个item, 并将cursor后移
-chain_t *next_item(circular_chain_t *list) {
-    if (list->current == NULL) {
-        return NULL;
-    }
-    chain_t *item = list->current->next;
-    list->current = item;
-    return item;
+// 在某个元素前插入元素
+void chain_insert_before(chain_t *chain, chain_elem_t *target, chain_elem_t *elem) {
+    /*
+        |ˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉ|
+        | +--------------------+  |
+        | ↓ˉˉprevˉˉ↑  ↓ˉˉprevˉˉ↑  |
+        | prev |   elem  | target |
+        | ↓__next__↑  ↓__next__↑  |
+        | +--------------------+  |
+        |_________________________|
+    */
+    // 新增项
+    elem->prev = target->prev;
+    elem->next = target;
+    // 目标项的前驱项
+    target->prev->next = elem;
+    // 目标项
+    target->prev = elem;
+
+    chain->size++;
 }
 
-// 读当前item, 并将cursor后移
-chain_t *read_item(circular_chain_t *list) {
-    if (list->current == NULL) {
-        return NULL;
-    }
-    chain_t *item = list->current;
-    list->current = item->next;
-    return item;
+
+// 在某个元素后插入元素
+void chain_insert_after(chain_t *chain, chain_elem_t *target, chain_elem_t *elem) {
+    /*
+        |ˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉ|
+        |  +--------------------+ |
+        |  ↓ˉˉprevˉˉ↑  ↓ˉˉprevˉˉ↑ |
+        | target  | elem   | next |
+        |  ↓__next__↑  ↓__next__↑ |
+        |  +--------------------+ |
+        |_________________________|
+    */
+    // 新增项
+    elem->prev = target;
+    elem->next = target->next;
+    // 目标项的后驱项
+    target->next->prev = elem;
+    // 目标项
+    target->next = elem;
+
+    chain->size++;
 }
 
-chain_t *remove_item(circular_chain_t *list, chain_t *item) {
-    if (list->size == 1) {
-        if (item == list->current) {
-            list->current = NULL;
-            list->size = 0;
-            return item;
-        }
-        return NULL;
-    }
-    for (int i = 0; i < list->size; ++i) {
-        if (read_item(list) != item) {
-            continue;
-        }
-        // 前面的元素
-        item->previous->next = item->next;
-        // 后面的元素
-        item->next->previous = item->previous;
-        // 当前item
-        if (item == list->current) {
-            list->current = item->previous;
-        }
-
-        list->size--;
-        return item;
-    }
-    return NULL;// 未找到
+// 往链表首部添加元素
+void chain_put_first(chain_t *chain, chain_elem_t *elem) {
+    chain_insert_before(chain, chain->head->next, elem);
 }
 
-chain_t *remove_item_by_value(circular_chain_t *list, void *item_value) {
-    if (list->size == 1) {
-        if (item_value == list->current->value) {
-            list->current = NULL;
-            list->size = 0;
-            return list->current;
-        }
-        return NULL;
-    }
 
-    chain_t *item;
-    for (int i = 0; i < list->size; ++i) {
-        item = read_item(list);
-        if (item->value != item_value) {
-            continue;
-        }
-        // 前面的元素
-        item->previous->next = item->next;
-        // 后面的元素
-        item->next->previous = item->previous;
-        // 当前item
-        if (item == list->current) {
-            list->current = item->previous;
-        }
+// 往链表尾部添加元素
+void chain_put_last(chain_t *chain, chain_elem_t *elem) {
+    chain_insert_after(chain, chain->tail->prev, elem);
+}
 
-        list->size--;
-        return item;
-    }
-    return NULL;// 未找到
+// 删除某个元素
+chain_elem_t *chain_remove(chain_t *chain, chain_elem_t *elem) {
+    /*
+        |ˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉˉ|
+        |  ↓ˉˉˉˉˉprevˉˉˉˉ↑    |
+        | prev | elem | next  |
+        |  ↓_____next____↑    |
+        |_____________________|
+    */
+    if (!chain_exist(chain, elem)) return NULL;
+    // 前驱项
+    elem->prev->next = elem->next;
+    // 后驱项
+    elem->next->prev = elem->prev;
+
+    chain->size--;
+    return elem;
+
+}
+
+// 弹出链表首部元素
+chain_elem_t *chain_pop_first(chain_t *chain) {
+    return chain_remove(chain, chain->head->next);
+}
+
+// 弹出链表尾部元素
+chain_elem_t *chain_pop_last(chain_t *chain) {
+    return chain_remove(chain, chain->tail->prev);
+}
+
+// 链表中是否存在某个元素
+bool chain_exist(chain_t *chain, chain_elem_t *elem) {
+    for (chain_elem_t *i = chain->head->next; i != chain->tail; i = i->next) if (i == elem) return true;
+    return false;
+}
+
+// 返回链表长度
+uint32 chain_len(chain_t *chain) {
+    return chain->size;
+}
+
+// 返回链表是否为空
+bool chain_empty(chain_t *chain) {
+    return chain->size == 0 || chain->head->next == chain->tail;
 }

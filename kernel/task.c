@@ -12,14 +12,15 @@
 
 bitmap_t *pids;
 
-circular_chain_t *tasks;
+chain_t *tasks;
 extern task_t *current_task;
 
 
 // 任务执行完成，退出任务
 void exit_current_task() {
     printk("ready exit task %p\n", current_task);
-    remove_item_by_value(tasks, current_task);
+    // current_task->state = TASK_DIED;
+    chain_remove(tasks,current_task->chain_elem);
     free_bit(pids, current_task->pid);
     free_page(current_task);
     current_task = NULL;
@@ -30,15 +31,19 @@ task_t *create_task(task_func_t func) {
     task_t *task = alloc_page();
     memset(task, 0, PAGE_SIZE);
 
+    // 任务队列item
+    chain_elem_t *elem = malloc(sizeof(chain_elem_t));
+
+    // task初始化
     task->pid = alloc_bit(pids);
     task->func = func;
-    task->sched_times = 0;
     task->state = TASK_READY;
+    task->sched_times = 0;
+    task->chain_elem = elem;
 
     // 添加到任务队列
-    chain_t *item = malloc(sizeof(chain_t));
-    item->value = task;
-    put_last(tasks, item);
+    elem->value = task;
+    chain_put_last(tasks, elem);
 
     return task;
 }
@@ -75,9 +80,10 @@ void task_init() {
     pids->used = 0;
     pids->total_bits = 1024;
 
-    tasks = malloc(sizeof(circular_chain_t));
-    tasks->size = 0;
-    tasks->current = NULL;
+    tasks = malloc(sizeof(chain_t));
+    tasks->head = malloc(sizeof(chain_elem_t ));
+    tasks->tail = malloc(sizeof(chain_elem_t ));
+    chain_init(tasks);
 
     create_task(idle_task); // 第一个创建的任务，pid一定为0
 }

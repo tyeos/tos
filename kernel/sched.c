@@ -10,36 +10,30 @@
 
 extern void processing_task(task_t *); // 在汇编中实现
 
-extern circular_chain_t *tasks;;
+extern chain_t *tasks;;
 task_t *current_task = NULL;
 
 task_t *get_next_ready_task() {
-    if (tasks == NULL) {
-        return NULL;
-    }
+    if (tasks == NULL) return NULL;
 
-    task_t *next = NULL;
     for (int i = 0; i < tasks->size; ++i) {
-        task_t *task = read_item(tasks)->value;
-        if (task->state != TASK_READY) continue;
-        next = task;
-        break;
+        task_t *task = chain_pop_first(tasks)->value;
+        chain_put_last(tasks, task->chain_elem); // 取出后添加到最后
+
+        if (task->state == TASK_READY) return task;
     }
 
-    return next;
+    return NULL;
 }
 
+// 时钟调度
 void clock_task_scheduler() {
     // 当前任务置为就绪状态
-    if (current_task != NULL) {
-        current_task->state = TASK_READY;
-    }
+    if (current_task != NULL) current_task->state = TASK_READY;
 
     // 换下一个任务
     current_task = get_next_ready_task();
-    if (current_task == NULL) {
-        return;
-    }
+    if (current_task == NULL) return;
 
     printk("clock_task_scheduler once ===================================== \n");
     current_task->state = TASK_RUNNING;
