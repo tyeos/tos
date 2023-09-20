@@ -11,22 +11,80 @@
 
 
 bitmap_t *pids;
-
 chain_t *tasks;
-extern task_t *current_task;
+
+task_t *current_task = NULL;
+task_t *idle_task;
 
 
-// 任务执行完成，退出任务
-void exit_current_task() {
-    printk("ready exit task %p\n", current_task);
-    // current_task->state = TASK_DIED;
-    chain_remove(tasks,current_task->chain_elem);
-    free_bit(pids, current_task->pid);
-    free_page(current_task);
-    current_task = NULL;
+/*
+ * 进行一次任务调度滴答，执行完成current_task即更新
+ */
+void task_scheduler_ticks() {
+    if (tasks == NULL) return;
+
+    // 检查当前任务
+    if (current_task != NULL) {
+        // ticks减为0才进行下一个任务调度
+        if (current_task->ticks > 0) {
+            current_task->ticks--;
+            current_task->elapsed_ticks++;
+            printk("clock_task_scheduler ticks ===================================== \n");
+            return;
+        }
+        // 保存当前任务状态，置为就绪状态
+        current_task->state = TASK_READY;
+        current_task->ticks = current_task->priority;
+    }
+
+    // 换下一个任务
+    for (int i = 0; i < tasks->size; ++i) {
+        task_t *task = chain_pop_first(tasks)->value;
+        chain_put_last(tasks, task->chain_elem); // 取出后添加到最后
+        if (task->state != TASK_READY) continue;
+
+        task->ticks--;
+        task->elapsed_ticks++;
+        task->state = TASK_RUNNING;
+        current_task = task;
+        printk("clock_task_scheduler once ===================================== \n");
+        return;
+    }
 }
 
-task_t *create_task(task_func_t func) {
+static void clear_task(task_t *task) {
+    printk("ready clear task %p\n", task);
+    task->state = TASK_DIED;
+    chain_remove(tasks, task->chain_elem);
+    free_bit(pids, task->pid);
+    free_page(task);
+}
+
+// 任务执行完成，退出任务
+uint32 exit_current_task() {
+    if (current_task == NULL) return 0;
+    bool is_idle = current_task == idle_task;
+    uint32 ssp = current_task->tss.ssp;
+    clear_task(current_task);
+    current_task = NULL;
+
+    // 若idle任务终止，则清理所有任务
+    if (is_idle) {
+        idle_task = NULL;
+        for (int i = 0; i < tasks->size; ++i) {
+            clear_task(chain_pop_first(tasks)->value);
+        }
+        return ssp; // 只有idle进程结束, ssp才有意义，即跳回到main
+    }
+
+    // 其他任务的终止，换到idle上来调度
+    chain_remove(tasks, idle_task->chain_elem);
+    chain_put_last(tasks, idle_task->chain_elem);
+    current_task = idle_task;
+    return 0;
+}
+
+static task_t *create_task(char *name, uint8 priority, task_func_t func) {
     // 创建任务
     task_t *task = alloc_page();
     memset(task, 0, PAGE_SIZE);
@@ -38,36 +96,40 @@ task_t *create_task(task_func_t func) {
     task->pid = alloc_bit(pids);
     task->func = func;
     task->state = TASK_READY;
-    task->sched_times = 0;
+    task->elapsed_ticks = 0;
     task->chain_elem = elem;
 
-    // 添加到任务队列
+    task->stack = (uint32) task + PAGE_SIZE;
+    task->ticks = priority;
+    task->priority = priority;
+    strcpy(task->name, name);
+
+    // 添加到任务队列末尾
     elem->value = task;
     chain_put_last(tasks, elem);
-
     return task;
 }
 
-void *task_func_test1(void *args) {
-    for (int i = 0; i < 100; ++i) {
+static void *task_test1(void *args) {
+    for (int i = 0; i < 1000; ++i) {
         printk("A======= %d\n", i);
     }
     return 0;
 }
 
-void *task_func_test2(void *args) {
-    for (int i = 0; i < 10000; ++i) {
+static void *task_test2(void *args) {
+    for (int i = 0; i < 1000; ++i) {
         printk("B=============== %d\n", i);
     }
     return 0;
 }
 
-void *idle_task(void *args) {
-//    create_task(task_func_test1);
-//    create_task(task_func_test2);
+static void *idle(void *args) {
+    create_task("task A", 2, task_test1);
+    create_task("task B", 2, task_test2);
 
     for (int i = 0; ; ++i) {
-        printk("idle %d\n", i);
+        printk("idle================================ %d\n", i);
 //        HLT
     }
     return 0;
@@ -81,11 +143,10 @@ void task_init() {
     pids->total_bits = 1024;
 
     tasks = malloc(sizeof(chain_t));
-    tasks->head = malloc(sizeof(chain_elem_t ));
-    tasks->tail = malloc(sizeof(chain_elem_t ));
+    tasks->head = malloc(sizeof(chain_elem_t));
+    tasks->tail = malloc(sizeof(chain_elem_t));
     chain_init(tasks);
 
-    create_task(idle_task); // 第一个创建的任务，pid一定为0
+    idle_task = create_task("idle", 1, idle); // 第一个创建的任务，pid一定为0
 }
-
 
