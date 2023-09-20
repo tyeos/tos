@@ -11,8 +11,8 @@ R3_DATA_SELECTOR equ R3_DATA_GDT_ENTRY_INDEX << 3 | 0b011
 extern alloc_upage
 extern user_entry
 
-global move_to_user
-move_to_user:
+global move_to_user_mode
+move_to_user_mode:
     ; ---------------------------------------------------------------------------------------
     ; 手动模拟中断返回，即切换到用户态
     ; ---------------------------------------------------------------------------------------

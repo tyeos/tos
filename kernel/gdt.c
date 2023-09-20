@@ -8,6 +8,7 @@
 #include "../include/string.h"
 #include "../include/sys.h"
 #include "../include/mm.h"
+#include "../include/task.h"
 
 #define GDT_SIZE 256
 
@@ -19,15 +20,46 @@
 #define GDT_SCREEN_INDEX 4 // 屏幕段索引值
 
 #define R3_CODE_GDT_ENTRY_INDEX GDT_REAL_MODE_USED_SIZE       // R3代码段在GDT中的索引值
-#define R3_DATA_GDT_ENTRY_INDEX (R3_CODE_GDT_ENTRY_INDEX + 1) // R3数据段段在GDT中的索引值
+#define R3_DATA_GDT_ENTRY_INDEX (R3_CODE_GDT_ENTRY_INDEX + 1) // R3数据段在GDT中的索引值
+#define TSS_GDT_ENTRY_INDEX (R3_DATA_GDT_ENTRY_INDEX + 1)     // TSS段在GDT中的索引值
 
-#define GDT_TOTAL_USED_SIZE (R3_DATA_GDT_ENTRY_INDEX + 1) // 一共创建了多少描述符
+#define GDT_TOTAL_USED_SIZE (TSS_GDT_ENTRY_INDEX + 1) // 一共创建了多少描述符
 
 uint64 gdt[GDT_SIZE] = {0};
 dt_ptr gdt_ptr;
 
+
+int r0_code_selector = GDT_CODE_INDEX << 3;
+int r0_data_selector = GDT_DATA_INDEX << 3;
+
 int r3_code_selector;
 int r3_data_selector;
+int tss_selector;
+tss_t tss;
+
+void init_tss_item(int gdt_index, int base, int limit) {
+    printk("init tss...\n");
+    tss.ss0 = r0_data_selector; // 构建内存
+    tss.esp0 = (uint32) alloc_page() + PAGE_SIZE; // 这里应该保存跳转那一刻的esp
+    tss.iobase = sizeof(tss);
+
+    global_descriptor *item = &gdt[gdt_index];
+
+    item->base_low = base & 0xffffff;
+    item->base_high = (base >> 24) & 0xff;
+    item->limit_low = limit & 0xffff;
+    item->limit_high = (limit >> 16) & 0xf;
+    item->segment = 0;     // 系统段
+    item->granularity = 0; // 字节
+    item->big = 0;         // 固定为 0
+    item->long_mode = 0;   // 固定为 0
+    item->present = 1;     // 在内存中
+    item->DPL = 0;         // 用于任务门或调用门
+    item->type = 0b1001;   // 32 位可用 tss
+
+    asm volatile("ltr ax;"::"a"(tss_selector));
+}
+
 
 // 设置全局描述符表项
 // gdt_index: 范围 [GDT_REAL_MODE_USED_SIZE ~ GDT_SIZE)
@@ -112,15 +144,21 @@ void gdt_init() {
     gdt_virtual_model_fix();
 
     // 创建r3用的代码段和数据段描述符
-    set_gdt_entry(R3_CODE_GDT_ENTRY_INDEX, 0b1000, 0b11); // 代码段，只执行，用户特权级
-    set_gdt_entry(R3_DATA_GDT_ENTRY_INDEX, 0b0010, 0b11); // 数据段，只读，用户特权级
+    set_gdt_entry(R3_CODE_GDT_ENTRY_INDEX, 0b1000, 0b11); // 代码段，只执行，r3用户特权级
+    set_gdt_entry(R3_DATA_GDT_ENTRY_INDEX, 0b0010, 0b11); // 数据段，只读，r3用户特权级
 
     // 创建r3用的选择子：代码段、数据段
     r3_code_selector = R3_CODE_GDT_ENTRY_INDEX << 3 | 0b011;
     r3_data_selector = R3_DATA_GDT_ENTRY_INDEX << 3 | 0b011;
 
+    // 创建TSS选择子：用于态的切换
+    tss_selector = TSS_GDT_ENTRY_INDEX << 3;
+
     gdt_ptr.base = (int) &gdt;
     gdt_ptr.limit = sizeof(gdt) - 1;
 
     __asm__ volatile ("lgdt gdt_ptr;"); // 重设GDT
+
+    // tss在进入用户态之前安装
+    init_tss_item(TSS_GDT_ENTRY_INDEX, (int) &tss, sizeof(tss_t) - 1);
 }

@@ -15,7 +15,7 @@
  *     因为该值非动态, 编译器在编译其他文件时会直接优化为最终逻辑代码,
  *     而目前本Makefile脚本中使用的方式为, 未修改的文件不会进行重新编译.
  */
-#define VIRTUAL_MODEL true
+#define VIRTUAL_MODEL false
 
 #define PAGE_SIZE 4096
 

@@ -128,9 +128,14 @@ static void *task_test2(void *args) {
     return NULL;
 }
 
+// 测试切换到用户态, 在汇编中实现
+extern void* move_to_user_mode(void *args);
+
 static void *idle(void *args) {
-    create_task("task A", 2, task_test1);
-    create_task("task B", 2, task_test2);
+//    create_task("task A", 2, task_test1);
+//    create_task("task B", 2, task_test2);
+
+    create_task("init", 1, move_to_user_mode);
 
     for (int i = 0;; ++i) {
         printk("idle== %d\n", i);

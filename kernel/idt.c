@@ -208,25 +208,26 @@ interrupt_gate idt[IDT_SIZE] = {0};
 dt_ptr idt_ptr;
 
 extern int interrupt_handler_table[0x2f]; // 地址在汇编中定义
-extern void interrupt_handler_clock(); // 函数汇编中定义
+extern void interrupt_handler_clock(); // 时钟中断函数，汇编中定义
+extern void interrupt_handler_system_call(); // 系统调用函数，汇编中定义
 
 void idt_init() {
-
     for (int i = 0; i < IDT_SIZE; ++i) {
         interrupt_gate *p = &idt[i];
 
         int handler = interrupt_handler_table[i];
         if (i == 0x20) handler = (int) interrupt_handler_clock;
+        if (i == 0x80) handler = (int) interrupt_handler_system_call;
 
         p->offset0 = handler & 0xffff;
         p->offset1 = (handler >> 16) & 0xffff; // 设置中断处理函数
 
-        p->selector = 1 << 3; // 代码段 （TI=0,RPL=0,即对应GDT表index=1的段）
-        p->reserved = 0;      // 保留不用
-        p->type = 0b1110;     // 中断门
-        p->segment = 0;       // 系统段
-        p->DPL = 0;           // 内核态
-        p->present = 1;       // 有效
+        p->selector = 1 << 3;           // 代码段 （TI=0,RPL=0,即对应GDT表index=1的段）
+        p->reserved = 0;                // 保留不用
+        p->type = 0b1110;               // 中断门
+        p->segment = 0;                 // 系统段
+        p->DPL = (i == 0x80) ? 3 : 0;   // 除允许用户态0x80中断外，其余均为内核态
+        p->present = 1;                 // 有效
     }
 
     // 让CPU知道中断向量表

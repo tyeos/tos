@@ -23,7 +23,12 @@ typedef enum task_state_t {
 } task_state_t;
 
 
-// Task Status Segment
+/*
+ * TSS, Task Status Segment
+ * TSS为intel为了方便操作系统管理进程而加入的一种结构
+ * TSS是一个段，即一块内存，这里保存要切换的进程的cpu信息，包括各种寄存器的值、局部描述表ldt的段选择子等，
+ * 切换时cpu会将这段内容存进各自对应的寄存器
+ */
 typedef struct tss_t {
     uint32 backlink; // offset=0*4, 前一个任务的链接，保存了前一个任状态段的段选择子
     uint32 esp0;     // offset=1*4, ring0 的栈顶地址
