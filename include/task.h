@@ -13,13 +13,13 @@ typedef void *(*task_func_t)(void *);
 /*进程或线程的状态*/
 typedef enum task_state_t {
 //    TASK_INIT,      // 初始化
-    TASK_RUNNING,   // 执行
-    TASK_READY,     // 就绪
-//    TASK_BLOCKED,   // 阻塞
-//    TASK_WAITING,   // 等待
-//    TASK_SLEEPING,  // 睡眠 (到点儿再来找我)
-//    TASK_HANGING,   // 挂起 (等我通知再过来)
-    TASK_DIED       // 死亡
+    TASK_RUNNING,   // 执行，正在运行态，当前运行的线程必然是此状态
+    TASK_READY,     // 就绪，可运行态，只有处于此状态的任务才有机会上处理器运行
+//    TASK_BLOCKED,   // 阻塞，不可运行态，锁竞争时若未取到信号量，等待期间就将其置为阻塞状态，直到其他任务释放的信号量分给该任务后恢复到就绪态
+//    TASK_WAITING,   // 等待，不可运行态，
+//    TASK_HANGING,   // 挂起，不可运行态， (等CPU通知)
+//    TASK_SLEEPING,  // 睡眠，不可运行态， (到指定时间再来找CPU)
+    TASK_DIED       // 死亡，不可运行态，已从或正从任务队列中摘除，不会再恢复执行
 } task_state_t;
 
 

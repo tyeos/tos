@@ -56,6 +56,7 @@ static void clear_task(task_t *task) {
     printk("ready clear task %p\n", task);
     task->state = TASK_DIED;
     chain_remove(tasks, task->chain_elem);
+    mfree(task->chain_elem, sizeof(chain_elem_t));
     free_bit(pids, task->pid);
     free_page(task);
 }
@@ -132,10 +133,10 @@ static void *task_test2(void *args) {
 extern void* move_to_user_mode(void *args);
 
 static void *idle(void *args) {
-//    create_task("task A", 2, task_test1);
-//    create_task("task B", 2, task_test2);
+    create_task("task A", 2, task_test1);
+    create_task("task B", 2, task_test2);
 
-    create_task("init", 1, move_to_user_mode);
+//    create_task("init", 1, move_to_user_mode);
 
     for (int i = 0;; ++i) {
         printk("idle== %d\n", i);

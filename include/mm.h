@@ -93,7 +93,8 @@ void free_upage(void *v);
 // 按字节分配、释放内存
 void *malloc(size_t size);
 void free_s(void *obj, int size);
-#define free(x) free_s((x), 0)
+#define mfree(x,i) free_s((x), i)
+#define free(x) free_s(x, 0)
 
 
 #endif //TOS_MM_H
