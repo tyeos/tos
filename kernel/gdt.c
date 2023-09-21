@@ -29,44 +29,101 @@ uint64 gdt[GDT_SIZE] = {0};
 dt_ptr gdt_ptr;
 
 
+/*
+ -----------------------------------------------------------------------------------------------------------------------
+ TSS为intel为了方便操作系统管理进程而加入的一种结构
+ TSS和LDT一样，必须要在GDT中注册才行，这是为了在引用描述符的阶段做安全检查，因此TSS是通过（16位）选择子来访问，
+ --------------------------------------------------------------------------
+    将tss加载到寄存器TR的指令是ltr, 其指令格式为：
+        ltr "16位通用寄存器"或"16位内存单元" ; 16位对应的值就是描述符在GDT中的tss选择子
+ -----------------------------------------------------------------------------------------------------------------------
+ TSS描述符结构参考 loader.asm 中的段描述符格式，对于高32位中的取值有以下规定：
+ --------------------------------------------------------------------------
+     D位(D/B): 固定为0
+     L位: 固定为0
+     S位: TSS描述符属于系统段描述符，所以S位固定位0
+     TYPE位: 在S为0的情况下，TYPE的值为10B1
+        -------------------------
+        | 11  | 10  |  9  |  8  |
+        |  1  |  0  |  B  |  1  |
+        -------------------------
+        B：表示busy位，B位为0时，表示任务不繁忙，B位为1时，表示任务繁忙。
+            任务创建未上CPU执行时初始为0，任务处于运行态时置为1，任务正常被换下时置回0，
+            如果当前任务嵌套调用了新任务，当前任务并不会置0，而是新老任务TSS的B位都为1，因为新任务属于老任务的分支。
+            嵌套任务调用的情况还会影响eflags寄存器中的NT位，这表示任务嵌套（Nest Task)。
+            B位由CPU维护。
+ -----------------------------------------------------------------------------------------------------------------------
+ iretd指令一共有两个功能：
+    (1)从中断返回到当前任务的中断前代码处。
+    (2)当前任务是被嵌套调用时，它会调用自己TSS中“上一个任务的TSS指针”的任务，也就是返回到上一个任务（iretd可以调用一个任务）。
+
+ 当CPU执行iretd指令时，始终要判断eflags中NT位的值。
+    如果NT等于1, 表示是从新任务返回到旧任务，即CPU到当前任务TSS的“上一个任务的TSS指针”字段中获取旧任务的TSS,转而去执行旧任务。
+    如果NT等于0, 表示要回到当前任务中断前的指令部分。
+
+ -----------------------------------------------------------------------------------------------------------------------
+
+
+ 描述符缓冲器结构：
+    | 32位线性基址 | 20位段界限 | 属性 |
+
+ -----------------------------------------------------------------------------------------------------------------------
+ */
+static tss_t tss;
+
+// 创建（内核态）r0用的选择子：代码段、数据段，栈段
 int r0_code_selector = GDT_CODE_INDEX << 3;
 int r0_data_selector = GDT_DATA_INDEX << 3;
+int r0_stack_selector = GDT_STACK_INDEX << 3;
 
-int r3_code_selector;
-int r3_data_selector;
-int tss_selector;
-tss_t tss;
+// 创建（用户态）r3用的选择子：代码段、数据段
+int r3_code_selector = R3_CODE_GDT_ENTRY_INDEX << 3 | 0b011; // TI=GDT, RPL=3
+int r3_data_selector = R3_DATA_GDT_ENTRY_INDEX << 3 | 0b011; // TI=GDT, RPL=3
 
-void init_tss_item(int gdt_index, int base, int limit) {
+// 创建TSS选择子：用于态的切换
+int tss_selector = TSS_GDT_ENTRY_INDEX << 3; // TI=GDT, RPL=0
+
+
+void set_gdt_tss_entry() {
     printk("init tss...\n");
-    tss.ss0 = r0_data_selector; // 构建内存
-    tss.esp0 = (uint32) alloc_page() + PAGE_SIZE; // 这里应该保存跳转那一刻的esp
-    tss.iobase = sizeof(tss);
+    memset(&tss, 0, sizeof(tss_t));
 
-    global_descriptor *item = &gdt[gdt_index];
+    tss.ss0 = r0_stack_selector;
+    tss.iobase = sizeof(tss_t); // IO位图的偏移地址大于等于TSS大小减一时，表示没有IO位图
+    // tss.esp0 在跳转那一刻再保存
+
+    global_descriptor *item = (global_descriptor *) &gdt[TSS_GDT_ENTRY_INDEX];
+    uint32 base = (uint32) &tss;
+    uint32 limit = sizeof(tss_t) - 1;
 
     item->base_low = base & 0xffffff;
     item->base_high = (base >> 24) & 0xff;
     item->limit_low = limit & 0xffff;
     item->limit_high = (limit >> 16) & 0xf;
     item->segment = 0;     // 系统段
-    item->granularity = 0; // 字节
-    item->big = 0;         // 固定为 0
-    item->long_mode = 0;   // 固定为 0
+    item->granularity = 0; // 粒度为字节
+    item->big = 0;         // D位固定为0
+    item->long_mode = 0;   // L位固定为0
     item->present = 1;     // 在内存中
     item->DPL = 0;         // 用于任务门或调用门
-    item->type = 0b1001;   // 32 位可用 tss
-
-    asm volatile("ltr ax;"::"a"(tss_selector));
+    item->type = 0b1001;   // 32位tss为0b10B1，TYPE中的B位初始为0
 }
 
+/*
+ * 仿照Linux的做法，不会为每一个任务创建tss，而是同一个cpu公用tss，仅更新tss特权级0对应的栈
+ */
+void update_tss_esp(task_t *task) {
+    tss.esp0 = (uint32) task + PAGE_SIZE;
+}
 
-// 设置全局描述符表项
-// gdt_index: 范围 [GDT_REAL_MODE_USED_SIZE ~ GDT_SIZE)
-// type: 内存段类型，只用低四位
-// dpl: 描述符特权级，只用低两位
+/*
+ * 设置全局描述符表项
+ *    gdt_index: 范围 [GDT_REAL_MODE_USED_SIZE ~ GDT_SIZE)
+ *    type: 内存段类型，只用低四位
+ *    dpl: 描述符特权级，只用低两位
+ */
 static void set_gdt_entry(int gdt_index, char type, char dpl) {
-    global_descriptor *item = &gdt[gdt_index];
+    global_descriptor *item = (global_descriptor *) &gdt[gdt_index];
 
     item->base_low = 0;
     item->base_high = 0;        // base = 0
@@ -75,7 +132,7 @@ static void set_gdt_entry(int gdt_index, char type, char dpl) {
 
     item->segment = 1;          // 非系统段
     item->type = type & 0xf;    // 取低四位
-    item->DPL = dpl & 0b11;    // 取低两位
+    item->DPL = dpl & 0b11;     // 取低两位
 
     item->present = 1;
     item->available = 0;
@@ -128,6 +185,9 @@ void gdt_virtual_model_fix() {
             p->base_high = 0xc0;
             continue;
         }
+        if (i == TSS_GDT_ENTRY_INDEX) {
+            continue; // TSS不用处理
+        }
         // 其他段, 修改base和limit即可
         p = (global_descriptor *) &gdt[i];
         p->base_high = 0xC0;        // base = 0xC0000000
@@ -138,27 +198,25 @@ void gdt_virtual_model_fix() {
 void gdt_init() {
     printk("init gdt ...\n");
 
-    __asm__ volatile ("sgdt gdt_ptr;"); // 取出GDT
+    // 取出GDT
+    __asm__ volatile ("sgdt gdt_ptr;");
     memcpy(&gdt, (void *) gdt_ptr.base, gdt_ptr.limit);
 
+    // 创建r3用的代码段和数据段描述符
+    set_gdt_entry(R3_CODE_GDT_ENTRY_INDEX, 0b1000, 0b11); // 代码段，只执行，DPL=3
+    set_gdt_entry(R3_DATA_GDT_ENTRY_INDEX, 0b0010, 0b11); // 数据段，只读，DPL=3
+
+    // 创建tss描述符
+    set_gdt_tss_entry();
+
+    // 虚拟地址模式处理
     gdt_virtual_model_fix();
 
-    // 创建r3用的代码段和数据段描述符
-    set_gdt_entry(R3_CODE_GDT_ENTRY_INDEX, 0b1000, 0b11); // 代码段，只执行，r3用户特权级
-    set_gdt_entry(R3_DATA_GDT_ENTRY_INDEX, 0b0010, 0b11); // 数据段，只读，r3用户特权级
-
-    // 创建r3用的选择子：代码段、数据段
-    r3_code_selector = R3_CODE_GDT_ENTRY_INDEX << 3 | 0b011;
-    r3_data_selector = R3_DATA_GDT_ENTRY_INDEX << 3 | 0b011;
-
-    // 创建TSS选择子：用于态的切换
-    tss_selector = TSS_GDT_ENTRY_INDEX << 3;
-
+    // 重设GDT
     gdt_ptr.base = (int) &gdt;
     gdt_ptr.limit = sizeof(gdt) - 1;
+    __asm__ volatile ("lgdt gdt_ptr;");
 
-    __asm__ volatile ("lgdt gdt_ptr;"); // 重设GDT
-
-    // tss在进入用户态之前安装
-    init_tss_item(TSS_GDT_ENTRY_INDEX, (int) &tss, sizeof(tss_t) - 1);
+    // 将tss加载到tr寄存器
+    asm volatile("ltr ax;"::"a"(tss_selector));
 }
