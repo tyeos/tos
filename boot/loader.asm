@@ -431,7 +431,7 @@ protected_model_start:
     mov gs, ax
     mov ax, SELECTOR_STACK
     mov ss, ax
-    mov esp, 0X9FC00
+    mov esp, 0x9FC00
 
     ; 将内核入口程序读入内存
     mov edi, HEAD_ADDR
