@@ -142,57 +142,24 @@ static void set_gdt_entry(int gdt_index, char type, char dpl) {
 }
 
 /*
- * 修复在实模式下创建的GDT项, 使其符合虚拟地址分页模式:
- *    对于低1M空间, 改前和改后操作回映射到同一块内存地址, 数据不会有任何影响, 只是符合分页规则了
- *    唯一可能由影响的就是对于代码段和数据段, 段界限从4GB改为了1GB
+ * 修复在实模式下创建的GDT项, 使其符合虚拟地址分页模式规划
  */
 void gdt_virtual_model_fix() {
-    // 如果未开启虚拟模式, 则中断此流程
-    if (!VIRTUAL_MODEL) {
-        return;
-    }
+    /*
+     * 开启虚拟模式后，对于低1MB的空间地址，有以下映射关系：
+     *      0x00000000~0x000FFFFF => 0x00000000~0x000FFFFF
+     *      0xC0000000~0xC00FFFFF => 0x00000000~0x000FFFFF
+     * 即内核使用3GB以上的低1MB和直接使用低1MB最终操作的物理地址都是一样的，
+     * 所以这里只修改屏幕段，证明虚拟地址和映射关系都已经生效即可。
+     *
+     * 其他段描述符的段基址和段界限暂时不改，
+     *      原因之一是因为如果内核代码需要虚拟地址映射，那么qemu下的gdb调试程序地址也都要改成虚拟地址，不然断点会有问题，
+     *      而这个并不是重点，且改不改对后面也没什么影响，既然已经支持调试，所以就不花精力去搞调试环境了。
+     */
 
-    global_descriptor *p;
-    for (int i = 0; i < GDT_TOTAL_USED_SIZE; ++i) {
-        if (i == GDT_CODE_INDEX) {
-            // 数据段与代码段, 基址从 0x0 改为 0xC0000000, 段界限从 4G>>12 改为 1G>>12
-            // 注: 内核的实际可用空间应该是1G-4M, 即去除最后一个页表, 这里为了计算方便就不细致处理了, 正常也用不到最后
-            p = (global_descriptor *) &gdt[GDT_CODE_INDEX];
-            p->base_high += 0xc0;
-            p->limit_high >>= 2; // limit原值为0xFFFFF, 只改高位即可
-            continue;
-        }
-        if (i == GDT_DATA_INDEX) {
-            p = (global_descriptor *) &gdt[GDT_DATA_INDEX];
-            p->base_high += 0xc0;
-            p->limit_high >>= 2;
-            continue;
-        }
-        if (i == GDT_STACK_INDEX) {
-            // 栈段, 基址从 0x0 改为 0xC0000000, 界限从 0x0 改为 1G>>12
-            // 不用管esp，因为栈段中存放的是基址是虚拟地址，对应的真实的物理就是在低1M内存，而esp中存放的是基于ss栈段的真实物理偏移量
-            // 或者 ss:esp 组合才是真正的栈顶, 即只要组合值是栈顶值就行, 栈段的虚拟地址在3GB以上, 那实际上栈顶 ss:esp 的虚拟地址也是在3GB以上
-            p = (global_descriptor *) &gdt[GDT_STACK_INDEX];
-            p->base_high = 0xc0;
-            int limit = (1 << 30 >> 12) - 1;
-            p->limit_high = limit >> 16;
-            p->limit_low = limit;
-            continue;
-        }
-        if (i == GDT_SCREEN_INDEX) {
-            // 屏幕段, 基址从 0xb8000 改为 0xc00b8000
-            p = (global_descriptor *) &gdt[GDT_SCREEN_INDEX];
-            p->base_high = 0xc0;
-            continue;
-        }
-        if (i == TSS_GDT_ENTRY_INDEX) {
-            continue; // TSS不用处理
-        }
-        // 其他段, 修改base和limit即可
-        p = (global_descriptor *) &gdt[i];
-        p->base_high = 0xC0;        // base = 0xC0000000
-        p->limit_high = 0x3;        // limit = 0x3FFFF, 表示3GB空间
-    }
+    // 屏幕段, 基址从 0xb8000 改为 0xc00b8000
+    global_descriptor *p = (global_descriptor *) &gdt[GDT_SCREEN_INDEX];
+    p->base_high = 0xc0;
 }
 
 void gdt_init() {

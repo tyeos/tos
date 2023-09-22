@@ -319,11 +319,6 @@ static void *virtual_unbinding_physical_page(void *virtual_page) {
 
 // 分配虚拟页, 并自动挂载物理页
 static void *_alloc_page(enum pool_flags pf) {
-    // 如果未启用虚拟模式, 则以物理页方式处理
-    if (!VIRTUAL_MODEL) {
-        return palloc_page();
-    }
-
     // 申请虚拟地址
     uint *v = (uint *) valloc_page(pf);
     if (!v) {
@@ -341,11 +336,6 @@ static void *_alloc_page(enum pool_flags pf) {
 
 // 释放虚拟页, 并解除和物理页的关联关系
 static void _free_page(void *v, enum pool_flags pf) {
-    // 如果未启用虚拟模式, 则以物理页方式处理
-    if (!VIRTUAL_MODEL) {
-        return pfree_page(v);
-    }
-
     // 取消虚拟地址和物理地址的映射关系
     void *p = virtual_unbinding_physical_page(v);
     // 释放物理页

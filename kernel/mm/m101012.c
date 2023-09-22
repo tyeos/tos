@@ -169,11 +169,6 @@
 
 
 void virtual_memory_init() {
-    // 如果未开启虚拟模式, 则中断此流程
-    if (!VIRTUAL_MODEL) {
-        return;
-    }
-
     // 页目录表 (Page Directory Table) , 大小为4KB (0x100000 ~ 0x100FFF)
     int *pdt = (int *) PAGE_DIR_PHYSICAL_ADDR;
     memset(pdt, 0, 1 << 12); // 清零
