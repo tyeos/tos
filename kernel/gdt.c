@@ -90,7 +90,6 @@ void set_gdt_tss_entry() {
 
     tss.ss0 = r0_stack_selector;
     tss.iobase = sizeof(tss_t); // IO位图的偏移地址大于等于TSS大小减一时，表示没有IO位图
-    // tss.esp0 在跳转那一刻再保存
 
     global_descriptor *item = (global_descriptor *) &gdt[TSS_GDT_ENTRY_INDEX];
     uint32 base = (uint32) &tss;
@@ -110,10 +109,16 @@ void set_gdt_tss_entry() {
 }
 
 /*
- * 仿照Linux的做法，不会为每一个任务创建tss，而是同一个cpu公用tss，仅更新tss特权级0对应的栈
+ * 仿照Linux的做法，不会为每一个任务创建tss，而是同一个cpu公用tss，仅更新tss特权级0对应的栈。
+ * 目前的程序设计中的特权级使用也和Linux一致，仅使用r0（内核）和r3（用户）。
+ * CPU在发生态的切换时，会自动读取并载入tss到准备执行的任务环境，并自动将切换前的任务状态保存到tss。
+ *
+ * 所以说，无论是从用户态使用 int 0x80 发送中断指令到内核态，还是使用正常中断返回，都不需要管tss。
+ *
+ * 目前tss初始化即构建（进入用户态之前即可），esp在进入用户态之前更新。
  */
-void update_tss_esp(task_t *task) {
-    tss.esp0 = (uint32) task + PAGE_SIZE;
+void update_tss_esp(uint32 esp0) {
+    tss.esp0 = esp0;
 }
 
 /*

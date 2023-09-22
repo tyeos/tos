@@ -120,5 +120,6 @@ void task_init();
 
 void task_scheduler_ticks();
 uint32 exit_current_task();
+uint32 get_current_task_pid() ;
 
 #endif //TOS_TASK_H

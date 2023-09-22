@@ -55,6 +55,20 @@ interrupt_handler_clock:
     mov eax, [esp + 8]
     mov [ecx + 19 * 4], eax
 
+    ; -------------------------------------------------------------------
+    ; 这里要看是否是用户进程过来的，是的话还要保存其 ss，esp
+    ; -------------------------------------------------------------------
+    and eax, 0x3
+    jz .skip_store_user_env
+    ; esp
+    mov eax, [esp + 0x10]
+    mov [ecx + 1 * 4], eax
+    ; ss
+    mov eax, [esp + 0x14]
+    mov [ecx + 2 * 4], eax
+
+.skip_store_user_env:
+
     ; eflags
     mov eax, [esp + 0x0C]
     mov [ecx + 9 * 4], eax
@@ -181,7 +195,6 @@ interrupt_handler_clock:
     ; mov ecx, [eax + 11 * 4]
     ; mov eax, [eax + 10 * 4]
 
-.recover_run:
     ; -----------------------------------------------------------
     ; 手动模拟中断返回，即切换到原来的场景
     ; -----------------------------------------------------------
@@ -190,7 +203,25 @@ interrupt_handler_clock:
     ;     eip          ↑ 低地址（ <-esp 最终栈顶）
     ;     cs           ↑（栈的增长方向）
     ;     eflags       ↑ 高地址
+    ;     (esp)        ↑ (用户程序还需要下面这两个)
+    ;     (ss)         ↑ 高地址
     ; -----------------------------------------------------------
+
+    ; -------------------------------------------------------------------
+    ; 检查，如果是恢复用户进程的任务，还需要压入ss和esp
+    ; -------------------------------------------------------------------
+    mov ecx, [eax + 19 * 4] ; cs
+    and ecx, 0x3
+    jz .skip_recover_user_env
+    ; ss
+    mov ecx, [eax + 2 * 4]
+    push ecx
+    ; esp
+    mov ecx, [eax + 1 * 4]
+    push ecx
+
+.skip_recover_user_env:
+
     ; eflags
     mov ecx, [eax + 9 * 4]
     push ecx

@@ -85,6 +85,11 @@ uint32 exit_current_task() {
     return 0;
 }
 
+uint32 get_current_task_pid() {
+    if (current_task == NULL) return 0;
+    return current_task->pid;
+}
+
 static task_t *create_task(char *name, uint8 priority, task_func_t func) {
     // 创建任务
     task_t *task = alloc_page();
@@ -115,32 +120,29 @@ static void *task_test1(void *args) {
     for (int i = 0; i < 20; ++i) {
         printk("A======= %d\n", i);
         HLT
-        HLT
     }
     return NULL;
 }
 
 static void *task_test2(void *args) {
-    for (int i = 0; i < 10; ++i) {
-        printk("B=============== %d\n", i);
-        HLT
+    for (int i = 0; i < 1000; ++i) {
+        printk("B==================================================== %d\n", i);
         HLT
     }
     return NULL;
 }
 
 // 测试切换到用户态, 在汇编中实现
-extern void* move_to_user_mode(void *args);
+extern void *move_to_user_mode(void *args);
 
 static void *idle(void *args) {
-    create_task("task A", 2, task_test1);
+//    create_task("task A", 2, task_test1);
     create_task("task B", 2, task_test2);
 
-//    create_task("init", 1, move_to_user_mode);
+    create_task("init", 1, move_to_user_mode);
 
     for (int i = 0;; ++i) {
-        printk("idle== %d\n", i);
-        HLT
+        printk("idle================================ %d\n", i);
         HLT
     }
     return NULL;

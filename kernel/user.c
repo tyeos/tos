@@ -4,22 +4,15 @@
 
 
 #include "../include/task.h"
-
-
-void printf(char *msg) {
-    asm volatile("mov eax, 0; int 0x80;"::"b"(msg)); // 发起0号中断调用
-}
-
-void syscall_no1(int i) {
-    asm volatile("mov eax, 1; int 0x80;"::"b"(i)); // 发起1号中断调用
-}
+#include "../include/sys.h"
+#include "../include/syscall.h"
 
 // 从汇编中回调
 void user_entry() {
-    int i = 10;
-    printf("user print 1\n");
-    syscall_no1(0x88);
-
-    while (true);
+    // 目前ebp存在一些问题，导致i的值总被复位
+    for (int i = 0; ; ++i) {
+        int pid = syscall(SYS_GET_PID);
+        syscall3(SYS_PRINT, "user print [%d] pid = %d\n", i, pid);
+    }
 }
 

@@ -8,6 +8,7 @@
 #include "../include/sys.h"
 #include "../include/mm.h"
 #include "../include/task.h"
+#include "../include/syscall.h"
 
 void kernel_main(void) {
     console_clear();
@@ -16,6 +17,7 @@ void kernel_main(void) {
     gdt_init();
     idt_init();
     clock_init();
+    syscall_init();
     task_init();
     STI
 
