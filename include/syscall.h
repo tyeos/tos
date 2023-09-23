@@ -14,8 +14,9 @@
  * 系统调用子功能号
  */
 enum SYSCALL_NUMBER {
-    SYS_PRINT,   // 0
-    SYS_GET_PID  // 1
+    SYS_PRINT,    // 0
+    SYS_GET_PID,  // 1
+    SYS_EXIT      // 2
 };
 
 void syscall_init(void);

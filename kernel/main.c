@@ -21,6 +21,9 @@ void kernel_main(void) {
     task_init();
     STI
 
+    BOCHS_DEBUG_MAGIC
+    BOCHS_DEBUG_MAGIC
+    
     while (true) {
         printk("main block! ");
         HLT

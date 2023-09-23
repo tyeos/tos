@@ -12,18 +12,23 @@
 
 #define GDT_SIZE 256
 
-#define GDT_REAL_MODE_USED_SIZE 5 // 在实模式下创建的描述符数量，参见 loader.asm 中的定义
+#define GDT_REAL_MODE_USED_SIZE 5 // 数量，
 
+/*
+ * 在实模式下创建的描述符
+ * 参见 loader.asm 中的定义
+ */
 #define GDT_CODE_INDEX 1   // 代码段索引值
 #define GDT_DATA_INDEX 2   // 数据段索引值
 #define GDT_STACK_INDEX 3  // 栈段索引值
 #define GDT_SCREEN_INDEX 4 // 屏幕段索引值
 
-#define R3_CODE_GDT_ENTRY_INDEX GDT_REAL_MODE_USED_SIZE       // R3代码段在GDT中的索引值
-#define R3_DATA_GDT_ENTRY_INDEX (R3_CODE_GDT_ENTRY_INDEX + 1) // R3数据段在GDT中的索引值
-#define TSS_GDT_ENTRY_INDEX (R3_DATA_GDT_ENTRY_INDEX + 1)     // TSS段在GDT中的索引值
-
-#define GDT_TOTAL_USED_SIZE (TSS_GDT_ENTRY_INDEX + 1) // 一共创建了多少描述符
+/*
+ * 在此新建的描述符
+ */
+#define R3_CODE_GDT_ENTRY_INDEX 5 // R3代码段在GDT中的索引值
+#define R3_DATA_GDT_ENTRY_INDEX 6 // R3数据段在GDT中的索引值
+#define TSS_GDT_ENTRY_INDEX 7     // TSS段在GDT中的索引值
 
 uint64 gdt[GDT_SIZE] = {0};
 dt_ptr gdt_ptr;
@@ -105,20 +110,29 @@ void set_gdt_tss_entry() {
     item->long_mode = 0;   // L位固定为0
     item->present = 1;     // 在内存中
     item->DPL = 0;         // 用于任务门或调用门
-    item->type = 0b1001;   // 32位tss为0b10B1，TYPE中的B位初始为0
+    item->type = 0b1001;   // 32位tss为0b10B1，TYPE中的B位初始为0表示未上CPU运行
 }
 
 /*
- * 仿照Linux的做法，不会为每一个任务创建tss，而是同一个cpu公用tss，仅更新tss特权级0对应的栈。
- * 目前的程序设计中的特权级使用也和Linux一致，仅使用r0（内核）和r3（用户）。
- * CPU在发生态的切换时，会自动读取并载入tss到准备执行的任务环境，并自动将切换前的任务状态保存到tss。
+ * 仿照Linux的做法，为每个cpu创建一个tss，在各个CPU上所有的任务共享一个TSS，各CPU的TR寄存器保存各CPU上的TSS，
+ * 在用ltr指令加载tss后，该tr寄存器用于指向同一个tss，之后也不会在重新加载tss。
+ * 在进程切换（到低特权级）时，只需要把tss中的ss0和esp0更新为（地特权级）新任务的（回到高特权级）内核栈的段地址及栈指针。
  *
+ * 目前的程序设计中的特权级使用也和Linux一致，仅使用r0（内核）和r3（用户）。
+ *
+ * CPU在首次发生态的切换时，会自动读取并载入tss，并将tss描述符TYPE中的B位置1，
+ * 还会将当前切换前任务的tss写入到“上一个任务的TSS指针”字段中，
  * 所以说，无论是从用户态使用 int 0x80 发送中断指令到内核态，还是使用正常中断返回，都不需要管tss。
  *
- * 目前tss初始化即构建（进入用户态之前即可），esp在进入用户态之前更新。
+ * tss无需人工干预，由CPU维护，但第一个任务还是要手工加载的。
  */
 void update_tss_esp(uint32 esp0) {
+    /*
+     * 这个栈就是用户进程从用户态切到内核态后所使用的栈，
+     * 目前的设计内核栈段是固定的，即ss0不用更新，仅更新esp0即可
+     */
     tss.esp0 = esp0;
+
 }
 
 /*

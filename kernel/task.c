@@ -125,7 +125,7 @@ static void *task_test1(void *args) {
 }
 
 static void *task_test2(void *args) {
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 50; ++i) {
         printk("B==================================================== %d\n", i);
         HLT
     }
@@ -143,6 +143,7 @@ static void *idle(void *args) {
 
     for (int i = 0;; ++i) {
         printk("idle================================ %d\n", i);
+        HLT
         HLT
     }
     return NULL;
