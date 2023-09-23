@@ -96,24 +96,44 @@ typedef struct tss_t {
     uint16 iobase;          // offset=25*4+16, I/O 位图基地址，16 位从 TSS 到 IO 权限位图的偏移
 
     uint32 ssp;             // offset=26*4, 任务影子栈指针（目前用于保存main中断到idle任务时的esp）
+
+    /* 该结构为tss固定写法，不要做调整，在汇编中也会根据变量位置找值 */
+
 } __attribute__((packed)) tss_t; // 目前占用字节数: 27*4=108
 
 /*
- * 以下结构即为PCB，Process Control Block, 即程序控制块，
- * 操作系统为每个进程提供一个PCB, PCB都属于内核空间，包括用户进程的PCB。
+ * 以下结构即为PCB，Process Control Block, 即进程控制块，
+ * 操作系统为每个进程提供一个PCB，它就是进程的身份证，用它来记录与此进程相关的信息，比如进程状态、PID、优先级等,
+ * PCB都属于内核空间，包括用户进程的PCB，所有PCB最后在调度器中用一张表（进程表）维护，所以PCB又称进程表项。
+ * 一般PCB的基本结构(实际格式取决于操作系统的功能复杂度):
+ *      ------------------------------------------
+ *      | 寄存器映像（保存进程现场，包括所有寄存器的值）  |
+ *      | 栈                                      |
+ *      | 栈指针（记录0级栈栈顶的位置）                |
+ *      | pid                                     |
+ *      | 进程状态（运行/就绪/阻塞）                  |
+ *      | 优先级                                   |
+ *      | 时间片                                   |
+ *      | 页表                                    |
+ *      | 打开的文件描述符                          |
+ *      | 父进程                                  |
+ *      | ....                                   |
+ *      ------------------------------------------
  */
 typedef struct task_t {
     tss_t tss;                // offset=0, 上下文
     uint32 pid;               // offset=sizeof(tss_t)+0*4
     task_func_t func;         // offset=sizeof(tss_t)+1*4, 要执行的任务, 函数指针, 32位模式下占4字节
-    task_state_t state;       // offset=sizeof(tss_t)+2*4, enum占4字节
-    uint32 elapsed_ticks;     // offset=sizeof(tss_t)+3*4, 总调度次数（从开始运行的总滴答数）
-    chain_elem_t* chain_elem; // offset=sizeof(tss_t)+4*4, 在任务队列中元素指针
+    uint32 elapsed_ticks;     // offset=sizeof(tss_t)+2*4, 总调度次数（从开始运行的总滴答数）
+    uint32 stack;             // offset=sizeof(tss_t)+3*4, 每个内核任务都有自己的内核栈
 
-    uint32 stack;           // offset=sizeof(tss_t)+5*4, 每个内核任务都有自己的内核栈
-    uint8 ticks;            // offset=sizeof(tss_t)+6*4, 占用CPU的时间滴答数（用中断次数表示，初始值为优先级）
-    uint8 priority;         // offset=sizeof(tss_t)+6*4+1, 任务优先级，值越大级别越高
-    char name[16];          // offset=sizeof(tss_t)+6*4+2, 线程名称
+    /* 以上字段位置不要做调整，在汇编中会根据变量位置找值，下面的变量可做调整 */
+
+    task_state_t state;       // offset=sizeof(tss_t)+4*4, 进程状态，enum占4字节
+    chain_elem_t* chain_elem; // offset=sizeof(tss_t)+5*4, 在任务队列中元素指针
+    uint8 ticks;              // offset=sizeof(tss_t)+6*4, 占用CPU的时间滴答数（用中断次数表示，初始值为优先级）
+    uint8 priority;           // offset=sizeof(tss_t)+6*4+1, 任务优先级，值越大级别越高
+    char name[16];            // offset=sizeof(tss_t)+6*4+2, 线程名称
 } __attribute__((packed)) task_t;
 
 void task_init();

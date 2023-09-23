@@ -1,9 +1,6 @@
 [SECTION .data]
 TSS_STRUCT_SIZE equ 27 << 2 ; tss_t 占用字节数
 
-GDT_DATA_INDEX equ 2
-R0_DATA_SELECTOR equ GDT_DATA_INDEX << 3
-
 [SECTION .text]
 [bits 32]
 
@@ -25,31 +22,8 @@ extern exit_current_task ; 在c中定义，退出普通任务，换到idle任务
 global interrupt_handler_clock
 interrupt_handler_clock:
 
-    ; 保存ecx，用其做临时变量
-    push ecx
-
-.check_segment_register
-    ; ---------------------------------------------------------------------------------------
-    ; 检查段寄存器
-    ; ---------------------------------------------------------------------------------------
-    ; 从内核态进入用户态时，为了安全，CPU会将段寄存器 ds、es、fs、gs 置0，即指向0全局描述符，
-    ; 目的就是为了防止在用户态通过内核段寄存器访问内核数据，所以从用户态中断进入到这里时，这些段寄存器依然是0
-    ; ---------------------------------------------------------------------------------------
-    ; 因为获取任务首先就要用到ds段寄存器，所以第一步就是确保段寄存器没问题
-    ; ---------------------------------------------------------------------------------------
-    ; 但这里仅作为段寄存器恢复，不作为确认从用户态到内核态的逻辑，用户态后面会用cs做特权级检查
-    ; ---------------------------------------------------------------------------------------
-    mov ecx, ds
-    cmp ecx, 0
-    jnz .check_segment_register_end
-    mov ecx, R0_DATA_SELECTOR
-    mov ds, ecx
-    mov es, ecx
-    mov fs, ecx
-    mov gs, ecx
-.check_segment_register_end:
-
     ; 看当前有没有调度的任务
+    push ecx
     mov ecx, [current_task]
     cmp ecx, 0
     je .skip_store_env ; 无需保存上下文环境
@@ -158,7 +132,7 @@ interrupt_handler_clock:
     ; ---------------------------------------------------------------------------------------
 
     ; 检查是否首次调度
-    mov ecx, [eax + TSS_STRUCT_SIZE + 3 * 4] ; 总调度次数
+    mov ecx, [eax + TSS_STRUCT_SIZE + 2 * 4] ; 总调度次数
     cmp ecx, 1
     jne .recover_env ; 旧任务需恢复上下文环境 （暂不考虑调度次数超过0xFFFFFFFF后归0的情况, 10ms一次归零也需要497天）
 
@@ -186,7 +160,7 @@ interrupt_handler_clock:
     ; ---------------------------------------------------------------------------------------
 
     mov [eax + 26 * 4], esp                  ; ssp, 保存当前栈（只有0号任务有意义）
-    mov esp, [eax + TSS_STRUCT_SIZE + 5 * 4] ; 切到任务自己的内核任务栈
+    mov esp, [eax + TSS_STRUCT_SIZE + 3 * 4] ; 切到任务自己的内核任务栈
     mov eax, [eax + TSS_STRUCT_SIZE + 4]     ; func
     sti                                      ; 允许中断
     call eax                                 ; 任务开始执行

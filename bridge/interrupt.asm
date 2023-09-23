@@ -79,7 +79,7 @@ interrupt_handler_%1:
     call interrupt_handler_callback ; 回调给C
 
     add esp, 4
-    popad ; 恢复现场，将栈中数据弹出，依次传给edi、esi、ebp、esp、ebx、edx、ecx、eax，即ESP会增加32
+    popad ; 恢复现场，将栈中数据弹出，依次传给edi、esi、ebp、esp、ebx、edx、ecx、eax，即ESP会增加32（注：esp原始值会被忽略）
 
     iret
 %endmacro
