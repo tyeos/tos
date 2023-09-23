@@ -1,7 +1,6 @@
 [SECTION .text]
 [bits 32]
 
-extern current_task
 extern syscall_table
 
 ; ---------------------------------------------------------------------------------------
