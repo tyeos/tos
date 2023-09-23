@@ -1,3 +1,7 @@
+[SECTION .data]
+GDT_DATA_INDEX equ 2
+R0_DATA_SELECTOR equ GDT_DATA_INDEX << 3
+
 [SECTION .text]
 [bits 32]
 
@@ -15,6 +19,17 @@ extern syscall_table
 ; ---------------------------------------------------------------------------------------
 global interrupt_handler_system_call
 interrupt_handler_system_call:
+
+    ; ---------------------------------------------------------------------------------------
+    ; 恢复内核态段寄存器
+    ; ---------------------------------------------------------------------------------------
+    push eax
+    mov eax, R0_DATA_SELECTOR
+    mov ds, eax
+    mov es, eax
+    mov fs, eax
+    mov gs, eax
+    pop eax
 
     ; ---------------------------------------------------------------------------------------
     ; 当前栈结构
