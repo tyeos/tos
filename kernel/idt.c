@@ -4,7 +4,7 @@
 
 #include "../include/dt.h"
 #include "../include/print.h"
-#include "../include/pic.h"
+#include "../include/int.h"
 #include "../include/types.h"
 #include "../include/sys.h"
 
@@ -207,17 +207,17 @@ interrupt_gate idt[IDT_SIZE] = {0};
 */
 dt_ptr idt_ptr;
 
-extern int interrupt_handler_table[0x2f]; // 地址在汇编中定义
-extern void interrupt_handler_clock(); // 时钟中断函数，汇编中定义
+extern uint interrupt_handler_table[0x2f];   // 地址在汇编中定义
+extern void interrupt_handler_clock();       // 时钟中断函数，汇编中定义
 extern void interrupt_handler_system_call(); // 系统调用函数，汇编中定义
 
 void idt_init() {
     for (int i = 0; i < IDT_SIZE; ++i) {
         interrupt_gate *p = &idt[i];
 
-        int handler = interrupt_handler_table[i];
-        if (i == 0x20) handler = (int) interrupt_handler_clock;
-        if (i == 0x80) handler = (int) interrupt_handler_system_call;
+        uint handler = interrupt_handler_table[i];
+        if (i == 0x20) handler = (uint) interrupt_handler_clock;
+        if (i == 0x80) handler = (uint) interrupt_handler_system_call;
 
         p->offset0 = handler & 0xffff;
         p->offset1 = (handler >> 16) & 0xffff; // 设置中断处理函数
@@ -244,18 +244,5 @@ void interrupt_handler_callback(int idt_index, int edi, int esi, int ebp, int es
         return;
     }
     // 其他中断，基本都称之为异常 exception (参考 README.md )
-    printk("\n============================\n");
-    printk("INTERRUPT : \n");
-    printk("   VECTOR : 0x%02X\n", idt_index);
-    printk("   EFLAGS : 0x%08X\n", eflags);
-    printk("       CS : 0x%02X\n", cs);
-    printk("      EIP : 0x%08X\n", eip);
-    printk("      ESP : 0x%08X\n", esp);
-    printk("============================\n");
-
-    while (true){
-        printk("ERROR STOP!\n");
-        CLI
-        HLT
-    }
+    interrupt_handler_exception(idt_index, edi, esi, ebp, esp, ebx, edx, ecx, eax, eip, cs, eflags);
 }

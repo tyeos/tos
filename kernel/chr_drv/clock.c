@@ -2,7 +2,6 @@
 // Created by toney on 23-9-2.
 //
 
-#include "../../include/print.h"
 #include "../../include/bridge/io.h"
 
 /*
@@ -85,9 +84,4 @@ void clock_init() {
     outb(PIT_CTRL_REG, 0b00110100);
     outb(PIT_CHAN0_REG, CLOCK_COUNTER & 0xff);
     outb(PIT_CHAN0_REG, (CLOCK_COUNTER >> 8) & 0xff);
-}
-
-void clock_interrupt_handler() {
-    // 该函数已废弃
-    printk("clock interrupt!\n");
 }

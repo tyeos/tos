@@ -4,7 +4,7 @@
 
 #include "../include/bridge/io.h"
 #include "../include/print.h"
-#include "../include/pic.h"
+#include "../include/int.h"
 
 /*
  * PIC, 即 Programmable Interrupt Controller
@@ -26,10 +26,15 @@ static void send_eoi(int idt_index) {
     }
 }
 
+void clock_interrupt_handler() {
+    // 该函数已废弃
+    printk("clock interrupt!\n");
+}
+
 // 可编程中断控制器（8259A）的中断处理
-void interrupt_handler_pic(int idt_index, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax, int eip,char cs, int eflags) {
-    send_eoi(idt_index);
-    switch (idt_index) {
+void interrupt_handler_pic(int vector_no, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax, int eip,char cs, int eflags) {
+    send_eoi(vector_no);
+    switch (vector_no) {
         case 0x20:// 时钟中断
             clock_interrupt_handler();
             break;
@@ -37,7 +42,7 @@ void interrupt_handler_pic(int idt_index, int edi, int esi, int ebp, int esp, in
             keyboard_interrupt_handler();
             break;
         default:  // 其他中断
-            printk("\npic interrupt: VECTOR = 0x%02X\n", idt_index);
+            printk("\npic interrupt: VECTOR = 0x%02X\n", vector_no);
             break;
     }
 }

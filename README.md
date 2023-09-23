@@ -2,6 +2,57 @@
 
 一款微型操作系统
 
+## 目前已实现：
+
+> 通过MBR载入内核
+> 
+> bochs 汇编调试环境
+> 
+> 从实模式进入保护模式
+> 
+> 进入C编写内核
+> 
+> qmue C调试环境
+> 
+> 操控显卡向屏幕输出字符
+
+
+> 通过8259A接收外部中断
+> 
+> 键盘驱动识别输入字符（键盘中断）
+> 
+> Intel 8253 时钟中断
+> 
+> 窗口多屏缓存与滚屏控制
+> 
+> 实现可变参数与printk
+
+> 内存检测
+> 
+> 开启(101012)分页模式（虚拟地址管理）
+> 
+> 内存分配与释放（物理页、虚拟页与字节块、位图管理）与页表挂载
+> 
+> 分页模式下的调试环境
+
+> 通过中断控制多任务切换
+>
+> r0内核态与r3用户态的切换（实现int0x80系统调用）
+>
+
+## 进行中：
+
+> 进程的虚拟页目录及页表管理
+> 
+> 多任务调度（进程与线程、内核态与用户态切换）
+
+> 硬盘驱动
+>
+> 文件管理系统
+>
+> shell命令窗口
+
+
 ---
 
 # 关于汇编指令：
@@ -103,7 +154,7 @@
 | 16         | #MF      | Floating-Point Error(Math Fault)           | Floating-point or WAIT/FWAIT instruction.                              | Fault      | N               |  
 | 17         | #AC      | Alignment Check                            | Any data reference in memory.3                                         | Fault      | Y(0)            |  
 | 18         | #MC      | Machine Check                              | Error codes(if any)and source are model dependent.4                    | Abort      | N               |  
-| 19         | #XM      | SIMD Floating-Point Exception              | SIMD Floating-Point Instruction5                                       | Fault      | N               |  
+| 19         | #XF      | SIMD Floating-Point Exception              | SIMD Floating-Point Instruction5                                       | Fault      | N               |  
 | 20~31      |          | Reserved                                   |                                                                        |            |                 |  
 | 32~255     |          | Maskable Interrupts                        | External interrupt from INTR pin or INT n instruction.                 | Interrupt  |                 |  
 
