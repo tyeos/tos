@@ -5,6 +5,8 @@
 #ifndef TOS_DT_H
 #define TOS_DT_H
 
+#include "types.h"
+
 // 全局描述符（全局描述符表项）结构
 typedef struct global_descriptor {
     uint16 limit_low;     // 段界限的 0 ~ 15 位
