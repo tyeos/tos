@@ -56,9 +56,9 @@ static void clear_task(task_t *task) {
     printk("ready clear task %p\n", task);
     task->state = TASK_DIED;
     chain_remove(tasks, task->chain_elem);
-    mfree(task->chain_elem, sizeof(chain_elem_t));
+    kmfree_s(task->chain_elem, sizeof(chain_elem_t));
     free_bit(pids, task->pid);
-    free_page(task);
+    free_kernel_page(task);
 }
 
 // 任务执行完成，退出任务
@@ -92,11 +92,11 @@ uint32 get_current_task_pid() {
 
 static task_t *create_task(char *name, uint8 priority, task_func_t func) {
     // 创建任务
-    task_t *task = alloc_page();
+    task_t *task = alloc_kernel_page();
     memset(task, 0, PAGE_SIZE);
 
     // 任务队列item
-    chain_elem_t *elem = malloc(sizeof(chain_elem_t));
+    chain_elem_t *elem = kmalloc(sizeof(chain_elem_t));
 
     // task初始化
     task->pid = alloc_bit(pids);
@@ -150,15 +150,15 @@ static void *idle(void *args) {
 }
 
 void task_init() {
-    pids = malloc(sizeof(bitmap_t));
-    pids->map = malloc(1024 >> 3); // 最多支持分配1024个任务
+    pids = kmalloc(sizeof(bitmap_t));
+    pids->map = kmalloc(1024 >> 3); // 最多支持分配1024个任务
     pids->cursor = 0;
     pids->used = 0;
     pids->total_bits = 1024;
 
-    tasks = malloc(sizeof(chain_t));
-    tasks->head = malloc(sizeof(chain_elem_t));
-    tasks->tail = malloc(sizeof(chain_elem_t));
+    tasks = kmalloc(sizeof(chain_t));
+    tasks->head = kmalloc(sizeof(chain_elem_t));
+    tasks->tail = kmalloc(sizeof(chain_elem_t));
     chain_init(tasks);
 
     idle_task = create_task("idle", 1, idle); // 第一个创建的任务，pid一定为0

@@ -13,7 +13,6 @@
 void kernel_main(void) {
     console_clear();
     memory_init();
-    virtual_memory_init(); // 开启分页, 使用虚拟内存地址
     gdt_init();
     idt_init();
     clock_init();
@@ -21,16 +20,24 @@ void kernel_main(void) {
 //    task_init();
     STI
 
-    void* kpage = alloc_page();
-    void* upage = alloc_upage();
+    void* kpage1 = alloc_kernel_page();
+    void* kpage2 = alloc_kernel_page();
+    void* upage1 = alloc_user_page();
+    void* upage2 = alloc_user_page();
 
-    free_page(kpage);
-    free_upage(upage);
+    free_kernel_page(kpage1);
+    free_kernel_page(kpage2);
+    free_user_page(upage1);
+    free_user_page(upage2);
+
+    void* kpage3 = alloc_kernel_page();
+    void* upage3 = alloc_user_page();
+    free_user_page(upage3);
+    free_kernel_page(kpage3);
 
 
     while (true) {
 //        printk("main block! ");
-        CLI
         HLT
     }
 }

@@ -10,8 +10,8 @@ R3_DATA_SELECTOR equ R3_DATA_GDT_ENTRY_INDEX << 3 | 0b011
 [SECTION .text]
 [bits 32]
 
-extern alloc_upage ; 在c中定义，分配用户页
-extern free_upage ; 在c中定义，释放用户页
+extern alloc_user_page ; 在c中定义，分配用户页
+extern free_user_page ; 在c中定义，释放用户页
 
 extern user_entry ; 在c中定义，模拟的用户程序入口
 extern update_tss_esp ; 在c中定义，更新tss的栈
@@ -49,7 +49,7 @@ move_to_user_mode:
     ; 要进入r3的用户程序，所以使用r3级别的代码段和数据段选择子
     ; 新申请4KB的空间给用户进程, 作为在r3下使用的栈
     ; ---------------------------------------------------------------------------------------
-    call alloc_upage
+    call alloc_user_page
     add eax, 0x1000
 
     ; 进入r3用户程序
@@ -102,7 +102,7 @@ exit_user_model:
     mov eax, [esp + 7 * 4] ; 取到r3的esp
     and eax, 0xFFFFF000 ; 分配的一页4k内存，低12位清零即为虚拟页地址
     push eax
-    call free_upage
+    call free_user_page
 
     mov eax, [current_task] ; 后续即进入0号任务恢复流程
 

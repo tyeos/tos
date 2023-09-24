@@ -17,24 +17,24 @@
 
  页目录表(总4K) 和 页表(总4M) 规划：
      ----------------------------------------------------------------------
-     |                               | 0x4FF000 ~ 0x4FFFFF (PT 767: 4K)   | => 页目录的第0x2FF项指向这里
+     |                               | (0x4FF000 ~ 0x4FFFFF) (PT 767: 4K) | => 页目录的第0x2FF项指向这里
      ·                               ·             ...                    ·
      ·                               ·             ...                    ·
-     |                               | 0x400000 ~ 0x400FFF (PT 512: 4K)   | => 页目录的第0x200项指向这里
+     |                               | (0x400000 ~ 0x400FFF) (PT 512: 4K) | => 页目录的第0x200项指向这里
      ·                               ·             ...                    ·
      ·    user (PT|PDE: 4K * 767)    ·             ...                    ·
      ·                               ·             ...                    ·
-     |                               | 0x300000 ~ 0x300FFF (PT 256: 4K)   | => 页目录的第0x100项指向这里
+     |                               | (0x300000 ~ 0x300FFF) (PT 256: 4K) | => 页目录的第0x100项指向这里
      ·                               ·             ...                    ·
      ·                               ·             ...                    ·
      ·                               ·             ...                    ·
-     |                               | 0x200000 ~ 0x200FFF (PT 1: 4K)     | => 页目录的第1项指向这里
+     |                               | (0x200000 ~ 0x200FFF) (PT 1: 4K)   | => 页目录的第1项指向这里
      ----------------------------------------------------------------------
-     |                               | 0x1FF000 ~ 0x1FFFFF (PT 1022: 4K)  | => 页目录的第0x3FE项指向这里
+     |                               | (0x1FF000 ~ 0x1FFFFF) (PT 1022: 4K)| => 页目录的第0x3FE项指向这里
      ·                               ·                ...                 ·
      ·   kernel (PT|PDE: 4K * 254)   ·                ...                 ·
      ·                               ·                ...                 ·
-     |                               | 0x102000 ~ 0x102FFF (PT 769: 4K)   | => 页目录的第0x301项指向这里
+     |                               | (0x102000 ~ 0x102FFF) (PT 769: 4K) | => 页目录的第0x301项指向这里
      ----------------------------------------------------------------------
      | kernel and user (PT|PDE: 4K)  | 0x101000 ~ 0x101FFF (PDE 0|968: 4K)| => 页目录的第0项和第0x300项同时指向这里, 即用户和内核的第0个页表都指向低4M物理地址
      ----------------------------------------------------------------------
@@ -49,12 +49,15 @@
      |                               | 0x100000 ~ 0x100003 (PDE 0: 4B)    | => CR3 页目录表物理地址 = 0x100000
      ----------------------------------------------------------------------
 
- 注: 页表(PT)地址和页目录项(PDE)中保持一直即可, 不一定非按上面的物理地址规划, 上图仅作参考实例.
+ 注: 页表(PT)地址和页目录项(PDE)中保持一致即可, 不一定非按上面的物理地址规划, 上图仅作参考示例.
      实际在以下程序中, 只有页目录表(PDT)存放的物理地址(0x100000~0x100FFF)最为关键, 该地址不仅作为页目录表, 还作为最后一个页表使用.
      其次就是第0张页表存放的物理地址(0x101000~0x101FFF), 用其指向低4MB物理内存(实际是为了用低1MB).
+
      至于其他都可随意, 比如可以将kernel和user的页表存放位置对换一下, 甚至分散到不同的内存区域也无所谓,
      只要最终在页目录表中的表项指向对应页表物理地址即可，页表项中的地址也可动态更改，
      因为已经把页目录表的最后一项的地址指向了自己，所以页目录项的值和每一个页表的值就建立好了对应的虚拟地址映射，即所有值都可以动态更改了。
+
+     实际在下面的程序中，也只有页目录地址和第0个页表的地址是固定的，其他都是动态分配的，即上面有括号的地址都是参考地址，假的。
 
  ---------------------------------------------------------------------------------------------------
  cr3控制寄存器：
@@ -165,10 +168,71 @@
 #define PAGE_DIR_PHYSICAL_ADDR 0x100000         // 页目录表物理地址, 低1MB空间之上的第一个字节
 #define PAGE_TAB_ITEM0_PHYSICAL_ADDR 0x101000   // 第0个页表物理地址, 页表空间之上的第一个字节
 
-#define PAGE_ATTR_US_RW_P 0b111 // 页属性，US=1, RW=1, P=1
 
+/*
+ * 虚拟内存的3GB以下分给用户，高1GB给内核，
+ * 内核和用户各自虚拟地址内存空间的低1MB均一一映射到物理地址内存空间的低1MB, 由0页表的前256项映射。
+ * 0页表还可以继续映射3MB的空间，这3MB空间可以映射到任意物理地址，但目前保留不用，
+ * 如果启用，这3MB的物理空间将可以由用户和内核同时访问，即内核和用户各自虚拟地址内存空间的低1MB~4MB之间的空间最终会指向同一块物理地址。
+ * 所以，虚拟地址空间 0x100000~0x3FFFFF(用户) 及 0xC0100000~0xC03FFFFF(内核) 在未来可作为特殊只用，
+ * 普通的虚拟地址空间分配将从 0x400000(用户) 或 0xC0400000(内核) 开始。
+ */
+#define KERNEL_MEM_BITMAP_LEN_ADDR 0xE14            // 内存分配对应位图长度的存储地址
+#define KERNEL_MEM_BITMAP_ADDR 0x30000              // 内核内存池的位图存储位置
+#define KERNEL_VIRTUAL_ALLOC_MEMORY_BASE 0xC0400000 // 内核的虚拟地址从哪里开始分配
+#define KERNEL_VIRTUAL_ALLOC_MEMORY_MAX_SIZE (0xFFC00000-KERNEL_VIRTUAL_ALLOC_MEMORY_BASE) // 内核的虚拟地址最多可分配多少字节
+#define USER_MEM_BITMAP_LEN_ADDR 0xE18              // 内存分配对应位图长度的存储地址
+#define USER_MEM_BITMAP_ADDR 0x38000                // 内核内存池的位图存储位置
+#define USER_VIRTUAL_ALLOC_MEMORY_BASE 0x400000     // 用户的虚拟地址从哪里开始分配
+#define USER_VIRTUAL_ALLOC_MEMORY_MAX_SIZE (0xC0000000-USER_VIRTUAL_ALLOC_MEMORY_BASE) // 用户的虚拟地址最多可分配多少字节
+
+extern physical_memory_alloc_t g_physical_memory;
+virtual_memory_alloc_t g_virtual_memory;
+
+static uint16 pdt_entry_counter[0x400] = {0}; // 记录每个页目录表项已经分配的页表数
+
+
+static void alloc_virtual_memory_init() {
+    // 虚拟内存（内核空间）
+    g_virtual_memory.kernel_addr_start = KERNEL_VIRTUAL_ALLOC_MEMORY_BASE;
+    g_virtual_memory.kernel_max_available_size =
+            g_physical_memory.available_size > KERNEL_VIRTUAL_ALLOC_MEMORY_MAX_SIZE
+            ? KERNEL_VIRTUAL_ALLOC_MEMORY_MAX_SIZE : g_physical_memory.available_size;
+    g_virtual_memory.kernel_addr_max_end =
+            g_virtual_memory.kernel_addr_start + g_virtual_memory.kernel_max_available_size - 1;
+    g_virtual_memory.kernel_alloc_cursor = 0;
+    g_virtual_memory.kernel_max_pages = g_virtual_memory.kernel_max_available_size >> 12;
+    g_virtual_memory.kernel_map_len = (uint32 *) KERNEL_MEM_BITMAP_LEN_ADDR;
+    *g_virtual_memory.kernel_map_len = (g_virtual_memory.kernel_max_pages + 7) / 8; // 1个字节可以表示8个物理页的使用情况
+    g_virtual_memory.kernel_map = (uint8 *) KERNEL_MEM_BITMAP_ADDR;
+    memset(g_virtual_memory.kernel_map, 0, *g_virtual_memory.kernel_map_len); // 清零
+
+    // 虚拟内存（用户空间）
+    g_virtual_memory.user_addr_start = USER_VIRTUAL_ALLOC_MEMORY_BASE;
+    g_virtual_memory.user_max_available_size =
+            g_physical_memory.available_size > USER_VIRTUAL_ALLOC_MEMORY_MAX_SIZE
+            ? USER_VIRTUAL_ALLOC_MEMORY_MAX_SIZE : g_physical_memory.available_size;
+    g_virtual_memory.user_addr_max_end =
+            g_virtual_memory.user_addr_start + g_virtual_memory.user_max_available_size - 1;
+    g_virtual_memory.user_alloc_cursor = 0;
+    g_virtual_memory.user_max_pages = g_virtual_memory.user_max_available_size >> 12;
+    g_virtual_memory.user_map_len = (uint32 *) USER_MEM_BITMAP_LEN_ADDR;
+    *g_virtual_memory.user_map_len = (g_virtual_memory.user_max_pages + 7) / 8; // 1个字节可以表示8个物理页的使用情况
+    g_virtual_memory.user_map = (uint8 *) USER_MEM_BITMAP_ADDR;
+    memset(g_virtual_memory.user_map, 0, *g_virtual_memory.user_map_len); // 清零
+
+    // 虚拟内存（通用）
+    g_virtual_memory.pages_used = 0;
+
+    printk("available kernel virtual memory pages %d: [0x%x~0x%x]\n", g_virtual_memory.kernel_max_pages,
+           g_virtual_memory.kernel_addr_start, g_virtual_memory.kernel_addr_max_end);
+    printk("available user virtual memory pages %d: [0x%x~0x%x]\n", g_virtual_memory.user_max_pages,
+           g_virtual_memory.user_addr_start, g_virtual_memory.user_addr_max_end);
+}
 
 void virtual_memory_init() {
+    alloc_virtual_memory_init();
+
     // 页目录表 (Page Directory Table) , 大小为4KB (0x100000 ~ 0x100FFF)
     int *pdt = (int *) PAGE_DIR_PHYSICAL_ADDR;
     memset(pdt, 0, 1 << 12); // 清零
@@ -181,7 +245,7 @@ void virtual_memory_init() {
     // 页表 (Page Table) ，大小为4KB (0x101000 ~ 0x101FFF), 一个页表项 (Page Table Entry) 对应一个真实的4KB物理地址空间
     int *pt = (int *) PAGE_TAB_ITEM0_PHYSICAL_ADDR;
     // 页目录项 (Page Directory Entry)，其中存放页表信息
-    pdt[0] = (int) pt | PAGE_ATTR_US_RW_P;
+    pdt[0] = (int) pt | 0b111; // 页属性，US=User, RW=1, P=1
 
     // 将内核的首个目录项(页目录第768项)也指向首个页表，目的是想在操作系统高3GB以上的虚拟地址上访问到低1MB物理地址
     // 这样虚拟地址0xC0000000~0xC03FFFFF的内存地址即指向了低4MB空间之内的物理地址(实际只用1M)
@@ -190,8 +254,11 @@ void virtual_memory_init() {
     // 创建页表项：每个页目录项(pde)对应一个页表，每个页表有1024个页表项，一个页表对应4MB物理地址空间
     // 这里仅创建前512个, 即映射到低2MB物理地址空间（0x0~0xFFFFF），剩余3MB(0x100000~0x3FFFFF)在该页表中保留
     for (int i = 0; i < 0x100; i++) {
-        pt[i] = (i << 12) | PAGE_ATTR_US_RW_P;
+        pt[i] = (i << 12) | 0b111; // 页属性，US=User, RW=1, P=1
     }
+
+    pdt_entry_counter[0] = 0x100;
+    pdt_entry_counter[0x300] = 0x100;
 
     /*
      * 将最后一个页目录项指向指向页目录表自己的地址，目的是为了以后动态操作页表:
@@ -199,7 +266,9 @@ void virtual_memory_init() {
      *     即使用虚拟地址 0xFFC00000~0xFFC00FFF 可以映射到物理地址 0x00101000~0x00101FFF
      *     使用虚拟地址 0xFFC01000~0xFFC01FFF 可以映射到物理地址 0x00102000~0x00102FFF ... 以此类推
      */
-    pdt[0x3FF] = (int) pdt | PAGE_ATTR_US_RW_P;
+    pdt[0x3FF] = (int) pdt | 0b111; // 页属性，US=User, RW=1, P=1
+
+    pdt_entry_counter[0x3FF] = 0x400;
 
     /*
      * 按规划，至此，虚拟内存到物理内存的映射关系应为：
@@ -293,22 +362,13 @@ void virtual_memory_init() {
 
 
     /*
-     * 注：以下页表也可在需要时再动态创建:
-     *      通过虚拟地址0xFFFFF000~0xFFFFFFFF即可修改页目录项指向的页表地址，
-     *      通过0xFFC00000~0xFFFFFFFF可以修改全部1024个页表的所有页表项指向的具体物理地址。
+     * 其他页表在需要时再动态创建（页目录项也在页表存在时再初始化），其中包括:
+     *      高1GB的内核虚拟地址空间：第0x301~0x3FE项, 共254个
+     *      低3GB的用户虚拟空间：第0x1~0x2FF项, 共767个
+     *
+     * 通过虚拟地址0xFFFFF000~0xFFFFFFFF即可修改页目录项指向的页表地址，
+     * 通过0xFFC00000~0xFFFFFFFC可以修改全部1024个页表的所有页表项指向的具体物理地址。
      */
-
-    // 创建页目录项（高1GB的内核虚拟地址空间）, 即第0x301~0x3FE项, 共254个
-    uint pt_addr = PAGE_TAB_ITEM0_PHYSICAL_ADDR;
-    for (int i = 0x301; i < 0x3FF; i++) {
-        // 每一个页表项都要对应4kB的物理空间, 即一个页表对应4MB的物理空间
-        // 这里只初始化页目录项指向页表位置，暂时不初始化页表项
-        pdt[i] = (pt_addr += 0x1000) | PAGE_ATTR_US_RW_P;
-    }
-    // 低3GB的用户虚拟空间, 即第0x1~0x2FF项, 共767个
-    for (int i = 1; i < 0x300; i++) {
-        pdt[i] = (pt_addr += 0x1000) | PAGE_ATTR_US_RW_P;
-    }
 
     set_cr3((uint) pdt);
     enable_page();
@@ -316,8 +376,9 @@ void virtual_memory_init() {
 
 /*
  * 提供通过虚拟地址访问页表项的方法
+ *      通过虚拟地址获取其对应的页表项
  */
-uint32 *get_pte_vaddr(void *vpage_addr) {
+static uint32 *get_pte_vaddr(void *vpage_addr) {
     /*
      -------------------------------------------------------------------------------------------------------------------
      * 要构建的目标虚拟地址 (构建规则参考:特殊情况2)：
@@ -360,9 +421,10 @@ uint32 *get_pte_vaddr(void *vpage_addr) {
 }
 
 /*
- * 提供通过虚拟地址访问页目录项的方法
+ * 提供通过虚拟地址访问页目录项的方法:
+ *      通过虚拟地址获取其对应的页目录项
  */
-uint32 *get_pde_vaddr(uint pde_index) {
+static uint32 *get_pde_vaddr(void *vpage_addr) {
     /*
      -------------------------------------------------------------------------------------------------------------------
      * 要构建的目标虚拟地址 (构建规则参考:特殊情况2的特殊情况2)：
@@ -376,8 +438,188 @@ uint32 *get_pde_vaddr(uint pde_index) {
         |                          offset                           |  0  |  0  |
         -------------------------------------------------------------------------
      -------------------------------------------------------------------------------------------------------------------
+     * 传入的虚拟地址（一般为虚拟页地址，即低12位均为0）
+     ----------------------------------------------------------------------
+        -------------------------------------------------------------
+        | 31  | 30  | 29  | 28  | 27  | 26  | 25  | 24  | 23  | 22  |
+        |  作为目标地址的offset的高10位，即将4KB空间分为1024份，每份4字节    |
+        -------------------------------------------------------------
+        -------------------------------------------------------------
+        | 21  | 20  | 19  | 18  | 17  | 16  | 15  | 14  | 13  | 12  |
+        |                           保留不用                          |
+        -------------------------------------------------------------
+        -------------------------------------------------------------------------
+        | 11  | 10  |  9  |  8  |  7  |  6  |  5  |  4  |  3  |  2  |  1  |  0  |
+        |                              保留不用                                   |
+        -------------------------------------------------------------------------
+     -------------------------------------------------------------------------------------------------------------------
      */
     // 最终返回长度为4字节的虚拟访问地址，这4字节对应的就是页目录项的物理地址
-    uint32 *pde_virtual_addr = (uint32 *) (0xFFFFF000 | (pde_index << 2) & 0xFFC);
+    uint32 *pde_virtual_addr = (uint32 *) (0xFFFFF000 | ((uint32) vpage_addr & 0xFFC00000) >> 20);
     return pde_virtual_addr;
 }
+
+
+/*
+ * 分配逻辑虚拟页
+ * 注：该地址必须挂物理页才可使用
+ */
+static void *_alloc_virtual_page(enum pool_flags pf) {
+    if (pf == PF_KERNEL) {
+        if (!g_virtual_memory.kernel_max_pages) {
+            printk("[%s] no memory available!\n", __FUNCTION__);
+            return NULL;
+        }
+        if (g_virtual_memory.pages_used >= g_physical_memory.pages_total) { // 分配的虚拟页总数不能大于物理页总数
+            printk("[%s] memory used up!\n", __FUNCTION__);
+            return NULL;
+        }
+        // 查找次数最多为总页数
+        for (uint cursor, index, i = 0; i < g_virtual_memory.kernel_max_pages; i++) {
+            cursor = (g_virtual_memory.kernel_alloc_cursor + i) % g_virtual_memory.kernel_max_pages;
+            index = cursor / 8;
+            if (g_virtual_memory.kernel_map[index] & (1 << cursor % 8)) {
+                continue; // 已分配
+            }
+            g_virtual_memory.kernel_map[index] |= (1 << cursor % 8);
+            g_virtual_memory.pages_used++;
+            g_virtual_memory.kernel_alloc_cursor = cursor + 1;
+            void *p = (void *) (g_virtual_memory.kernel_addr_start + (cursor << 12));
+            printk("[%s] alloc page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
+                   g_virtual_memory.kernel_map[index], g_virtual_memory.pages_used);
+            return p;
+        }
+    } else {
+        if (!g_virtual_memory.user_max_pages) {
+            printk("[%s] no memory available!\n", __FUNCTION__);
+            return NULL;
+        }
+        if (g_virtual_memory.pages_used >= g_physical_memory.pages_total) { // 分配的虚拟页总数不能大于物理页总数
+            printk("[%s] memory used up!\n", __FUNCTION__);
+            return NULL;
+        }
+        // 查找次数最多为总页数
+        for (uint cursor, index, i = 0; i < g_virtual_memory.user_max_pages; i++) {
+            cursor = (g_virtual_memory.user_alloc_cursor + i) % g_virtual_memory.user_max_pages;
+            index = cursor / 8;
+            if (g_virtual_memory.user_map[index] & (1 << cursor % 8)) {
+                continue; // 已分配
+            }
+            g_virtual_memory.user_map[index] |= (1 << cursor % 8);
+            g_virtual_memory.pages_used++;
+            g_virtual_memory.user_alloc_cursor = cursor + 1;
+            void *p = (void *) (g_virtual_memory.user_addr_start + (cursor << 12));
+            printk("[%s] alloc page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
+                   g_virtual_memory.user_map[index], g_virtual_memory.pages_used);
+            return p;
+        }
+    }
+
+    // 前面已经进行空间预测, 逻辑不会走到这里
+    printk("[%s] memory error!\n", __FUNCTION__);
+    return NULL;
+}
+
+/*
+ * 释放逻辑虚拟页
+ * 注：需要提前释挂载的物理页
+ */
+static void _free_virtual_page(enum pool_flags pf, void *p) {
+    if (pf == PF_KERNEL) {
+        // 内核逻辑
+        if ((uint) p < g_virtual_memory.kernel_addr_start || (uint) p > g_virtual_memory.kernel_addr_max_end) {
+            printk("[%s] invalid kernel address: 0x%x\n", __FUNCTION__, p);
+            return;
+        }
+
+        int cursor = (int) (p - g_virtual_memory.kernel_addr_start) >> 12;
+        int index = cursor / 8;
+        g_virtual_memory.kernel_map[index] &= ~(1 << cursor % 8);
+        g_virtual_memory.pages_used--;
+
+        printk("[%s] free kernel page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
+               g_virtual_memory.kernel_map[index], g_virtual_memory.pages_used);
+        return;
+    }
+    // 用户逻辑
+    if ((uint) p < g_virtual_memory.user_addr_start || (uint) p > g_virtual_memory.user_addr_max_end) {
+        printk("[%s] invalid user address: 0x%x\n", __FUNCTION__, p);
+        return;
+    }
+
+    int cursor = (int) (p - g_virtual_memory.user_addr_start) >> 12;
+    int index = cursor / 8;
+    g_virtual_memory.user_map[index] &= ~(1 << cursor % 8);
+    g_virtual_memory.pages_used--;
+
+    printk("[%s] free user page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
+           g_virtual_memory.user_map[index], g_virtual_memory.pages_used);
+}
+
+
+/*
+ * 申请虚拟页，并挂载物理页
+ * 注：physical_page 需为可用的物理地址，大小为4KB
+ */
+void *alloc_virtual_page(enum pool_flags pf, void *binding_physical_page) {
+    // 申请虚拟地址
+    void *virtual_page = _alloc_virtual_page(pf);
+    // 获取页目录项的访问指针
+    uint32 *pde_vaddr = get_pde_vaddr(virtual_page);
+    /*
+     * 检查P位：
+     *      如果为1，表示页表可用。
+     *      如果为0，需先申请页表地址，并挂载，将位置1。
+     */
+    if (!(*pde_vaddr & 0b1)) {
+        void *paddr = alloc_physical_page(); // 物理地址
+        *pde_vaddr = (uint32) paddr | 0b111; // 页属性，US=User, RW=1, P=1
+        uint32 pte_index = (uint32) virtual_page >> 22;
+        pdt_entry_counter[pte_index]++;
+        printk("[%s] create pde [0x%x -> 0x%x]\n", __FUNCTION__, pte_index, paddr);
+    }
+
+    // 获取访问页表项的指针
+    uint32 *pte_vaddr = get_pte_vaddr(virtual_page);
+    // 修改页目表项的值
+    if (pf == PF_KERNEL) {
+        *pte_vaddr = (uint32) binding_physical_page | 0b011; // 页属性，US=Supervisor, RW=1, P=1
+    } else {
+        *pte_vaddr = (uint32) binding_physical_page | 0b111; // 页属性，US=User, RW=1, P=1
+    }
+    printk("[%s] bound [0x%x -> 0x%x]\n", __FUNCTION__, virtual_page, binding_physical_page);
+    return virtual_page;
+}
+
+/*
+ * 取消挂载物理页，并释放虚拟页
+ * 注：将返回被取消挂载的物理页
+ */
+void *free_virtual_page(enum pool_flags pf, void *virtual_page) {
+
+    // 获取访问页表项的指针
+    uint32 *pte_vaddr = get_pte_vaddr(virtual_page);
+    // 释放虚拟页
+    void *unbinding_physical_page = (void *) (*pte_vaddr & 0xFFFFF000); // 将其映射的物理页地址返回
+    *pte_vaddr = 0; // 取消关联
+
+    // 检查如果页表项完都释放了，则对应页表也释放
+
+    uint32 pte_index = (uint32) virtual_page >> 22;
+    if (pdt_entry_counter[pte_index] <= 1) {
+        pdt_entry_counter[pte_index]--;
+        // 获取页目录项的访问指针
+        uint32 *pde_vaddr = get_pde_vaddr(virtual_page);
+        // 获取页表地址
+        uint32 paddr = *pde_vaddr & 0xFFFFF000;
+        // 取消页目录项和页表的关联
+        *pde_vaddr = 0;
+        // 释放页表地址
+        free_physical_page((void *) paddr);
+    }
+
+    // 释放虚拟地址
+    _free_virtual_page(pf, virtual_page);
+    return unbinding_physical_page;
+}
+

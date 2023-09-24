@@ -10,11 +10,11 @@
 #define ARDS_BUFFER_ADDR 0x1000
 
 /*
- * 1MB以上为有效使用内存, 2MB以上作为有效分配内存
- * 1MB~2MB之间的1MB内存用于存放页目录表及所有的页表
+ * 1MB以上为有效使用内存, 1MB+8KB以上作为有效分配内存
+ * 这8KB内存用于存放页目录表及第0个页表
  */
 #define AVAILABLE_START_MEMORY_FROM 0x100000
-#define AVAILABLE_ALLOC_MEMORY_FROM 0x200000
+#define AVAILABLE_ALLOC_MEMORY_FROM 0x102000
 
 /*
  * 物理内存按页向外提供
@@ -22,24 +22,6 @@
 #define PHYSICAL_MEM_BITMAP_LEN_ADDR 0xE10   // 内存分配对应位图长度的存储地址
 #define PHYSICAL_MEM_BITMAP_ADDR 0x10000     // 内存分配对应的位图存储起始地址
 physical_memory_alloc_t g_physical_memory;
-
-/*
- * 虚拟内存的3GB以下分给用户，高1GB给内核，
- * 内核和用户各自虚拟地址内存空间的低1MB均一一映射到物理地址内存空间的低1MB, 由0页表的前256项映射。
- * 0页表还可以继续映射3MB的空间，这3MB空间可以映射到任意物理地址，但目前保留不用，
- * 如果启用，这3MB的物理空间将可以由用户和内核同时访问，即内核和用户各自虚拟地址内存空间的低1MB~4MB之间的空间最终会指向同一块物理地址。
- * 所以，虚拟地址空间 0x100000~0x3FFFFF(用户) 及 0xC0100000~0xC03FFFFF(内核) 在未来可作为特殊只用，
- * 普通的虚拟地址空间分配将从 0x400000(用户) 或 0xC0400000(内核) 开始。
- */
-#define KERNEL_MEM_BITMAP_LEN_ADDR 0xE14            // 内存分配对应位图长度的存储地址
-#define KERNEL_MEM_BITMAP_ADDR 0x30000              // 内核内存池的位图存储位置
-#define KERNEL_VIRTUAL_ALLOC_MEMORY_BASE 0xC0400000 // 内核的虚拟地址从哪里开始分配
-#define KERNEL_VIRTUAL_ALLOC_MEMORY_MAX_SIZE (0xFFC00000-KERNEL_VIRTUAL_ALLOC_MEMORY_BASE) // 内核的虚拟地址最多可分配多少字节
-#define USER_MEM_BITMAP_LEN_ADDR 0xE18              // 内存分配对应位图长度的存储地址
-#define USER_MEM_BITMAP_ADDR 0x38000                // 内核内存池的位图存储位置
-#define USER_VIRTUAL_ALLOC_MEMORY_BASE 0x400000     // 用户的虚拟地址从哪里开始分配
-#define USER_VIRTUAL_ALLOC_MEMORY_MAX_SIZE (0xC0000000-USER_VIRTUAL_ALLOC_MEMORY_BASE) // 用户的虚拟地址最多可分配多少字节
-virtual_memory_alloc_t g_virtual_memory;
 
 void memory_init() {
     checked_memory_info_t info;
@@ -78,36 +60,8 @@ void memory_init() {
             g_physical_memory.map = (uint8 *) PHYSICAL_MEM_BITMAP_ADDR;
             memset(g_physical_memory.map, 0, *g_physical_memory.map_len); // 清零
 
-            // 虚拟内存（内核空间）
-            g_virtual_memory.kernel_addr_start = KERNEL_VIRTUAL_ALLOC_MEMORY_BASE;
-            g_virtual_memory.kernel_max_available_size =
-                    g_physical_memory.available_size > KERNEL_VIRTUAL_ALLOC_MEMORY_MAX_SIZE
-                    ? KERNEL_VIRTUAL_ALLOC_MEMORY_MAX_SIZE : g_physical_memory.available_size;
-            g_virtual_memory.kernel_addr_max_end =
-                    g_virtual_memory.kernel_addr_start + g_virtual_memory.kernel_max_available_size - 1;
-            g_virtual_memory.kernel_alloc_cursor = 0;
-            g_virtual_memory.kernel_max_pages = g_virtual_memory.kernel_max_available_size >> 12;
-            g_virtual_memory.kernel_map_len = (uint32 *) KERNEL_MEM_BITMAP_LEN_ADDR;
-            *g_virtual_memory.kernel_map_len = (g_virtual_memory.kernel_max_pages + 7) / 8; // 1个字节可以表示8个物理页的使用情况
-            g_virtual_memory.kernel_map = (uint8 *) KERNEL_MEM_BITMAP_ADDR;
-            memset(g_virtual_memory.kernel_map, 0, *g_virtual_memory.kernel_map_len); // 清零
+            virtual_memory_init(); // 开启分页, 使用虚拟内存地址
 
-            // 虚拟内存（用户空间）
-            g_virtual_memory.user_addr_start = USER_VIRTUAL_ALLOC_MEMORY_BASE;
-            g_virtual_memory.user_max_available_size =
-                    g_physical_memory.available_size > USER_VIRTUAL_ALLOC_MEMORY_MAX_SIZE
-                    ? USER_VIRTUAL_ALLOC_MEMORY_MAX_SIZE : g_physical_memory.available_size;
-            g_virtual_memory.user_addr_max_end =
-                    g_virtual_memory.user_addr_start + g_virtual_memory.user_max_available_size - 1;
-            g_virtual_memory.user_alloc_cursor = 0;
-            g_virtual_memory.user_max_pages = g_virtual_memory.user_max_available_size >> 12;
-            g_virtual_memory.user_map_len = (uint32 *) USER_MEM_BITMAP_LEN_ADDR;
-            *g_virtual_memory.user_map_len = (g_virtual_memory.user_max_pages + 7) / 8; // 1个字节可以表示8个物理页的使用情况
-            g_virtual_memory.user_map = (uint8 *) USER_MEM_BITMAP_ADDR;
-            memset(g_virtual_memory.user_map, 0, *g_virtual_memory.user_map_len); // 清零
-
-            // 虚拟内存（通用）
-            g_virtual_memory.pages_used = 0;
         }
     }
 
@@ -118,14 +72,10 @@ void memory_init() {
 
     printk("available physical memory pages %d: [0x%x~0x%x]\n", g_physical_memory.pages_total,
            g_physical_memory.addr_start, g_physical_memory.addr_end);
-    printk("available kernel virtual memory pages %d: [0x%x~0x%x]\n", g_virtual_memory.kernel_max_pages,
-           g_virtual_memory.kernel_addr_start, g_virtual_memory.kernel_addr_max_end);
-    printk("available user virtual memory pages %d: [0x%x~0x%x]\n", g_virtual_memory.user_max_pages,
-           g_virtual_memory.user_addr_start, g_virtual_memory.user_addr_max_end);
 }
 
 // 分配可用物理页
-static void *palloc_page() {
+void *alloc_physical_page() {
     if (g_physical_memory.addr_start != AVAILABLE_ALLOC_MEMORY_FROM) {
         printk("[%s] no memory available!\n", __FUNCTION__);
         return NULL;
@@ -154,8 +104,8 @@ static void *palloc_page() {
     return NULL;
 }
 
-// 批量分配可用物理页
-static void *palloc_pages(uint count, void **pages) {
+// 批量分配可用物理页（暂时不用）
+static void *alloc_physical_pages(uint count, void **pages) {
     if (g_physical_memory.addr_start != AVAILABLE_ALLOC_MEMORY_FROM || count < 1) {
         printk("[%s] no memory available!\n", __FUNCTION__);
         return NULL;
@@ -196,9 +146,9 @@ static void *palloc_pages(uint count, void **pages) {
 }
 
 // 释放物理页
-static void pfree_page(void *p) {
+void free_physical_page(void *p) {
     if ((uint) p < g_physical_memory.addr_start || (uint) p > g_physical_memory.addr_end) {
-        printk("[%s] invalid address!\n", __FUNCTION__);
+        printk("[%s] invalid address: 0x%x\n", __FUNCTION__, p);
         return;
     }
 
@@ -211,163 +161,51 @@ static void pfree_page(void *p) {
            g_physical_memory.map[index], g_physical_memory.pages_used);
 }
 
-// 分配虚拟页, 不考虑是否挂物理页
-static void *valloc_page(enum pool_flags pf) {
-    if (pf == PF_KERNEL) {
-        if (!g_virtual_memory.kernel_max_pages) {
-            printk("[%s] no memory available!\n", __FUNCTION__);
-            return NULL;
-        }
-        if (g_virtual_memory.pages_used >= g_physical_memory.pages_total) { // 分配的虚拟页总数不能大于物理页总数
-            printk("[%s] memory used up!\n", __FUNCTION__);
-            return NULL;
-        }
-        // 查找次数最多为总页数
-        for (uint cursor, index, i = 0; i < g_virtual_memory.kernel_max_pages; i++) {
-            cursor = (g_virtual_memory.kernel_alloc_cursor + i) % g_virtual_memory.kernel_max_pages;
-            index = cursor / 8;
-            if (g_virtual_memory.kernel_map[index] & (1 << cursor % 8)) {
-                continue; // 已分配
-            }
-            g_virtual_memory.kernel_map[index] |= (1 << cursor % 8);
-            g_virtual_memory.pages_used++;
-            g_virtual_memory.kernel_alloc_cursor = cursor + 1;
-            void *p = (void *) (g_virtual_memory.kernel_addr_start + (cursor << 12));
-            printk("[%s] alloc page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
-                   g_virtual_memory.kernel_map[index], g_virtual_memory.pages_used);
-            return p;
-        }
-    } else {
-        if (!g_virtual_memory.user_max_pages) {
-            printk("[%s] no memory available!\n", __FUNCTION__);
-            return NULL;
-        }
-        if (g_virtual_memory.pages_used >= g_physical_memory.pages_total) { // 分配的虚拟页总数不能大于物理页总数
-            printk("[%s] memory used up!\n", __FUNCTION__);
-            return NULL;
-        }
-        // 查找次数最多为总页数
-        for (uint cursor, index, i = 0; i < g_virtual_memory.user_max_pages; i++) {
-            cursor = (g_virtual_memory.user_alloc_cursor + i) % g_virtual_memory.user_max_pages;
-            index = cursor / 8;
-            if (g_virtual_memory.user_map[index] & (1 << cursor % 8)) {
-                continue; // 已分配
-            }
-            g_virtual_memory.user_map[index] |= (1 << cursor % 8);
-            g_virtual_memory.pages_used++;
-            g_virtual_memory.user_alloc_cursor = cursor + 1;
-            void *p = (void *) (g_virtual_memory.user_addr_start + (cursor << 12));
-            printk("[%s] alloc page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
-                   g_virtual_memory.user_map[index], g_virtual_memory.pages_used);
-            return p;
-        }
-    }
-
-    // 前面已经进行空间预测, 逻辑不会走到这里
-    printk("[%s] memory error!\n", __FUNCTION__);
-    return NULL;
-}
-
-// 释放虚拟页, 不考虑是否挂物理页
-static void vfree_page(void *p, enum pool_flags pf) {
-    if (pf == PF_KERNEL) {
-        // 内核逻辑
-        if ((uint) p < g_virtual_memory.kernel_addr_start || (uint) p > g_virtual_memory.kernel_addr_max_end) {
-            printk("[%s] invalid address!\n", __FUNCTION__);
-            return;
-        }
-
-        int cursor = (int) (p - g_virtual_memory.kernel_addr_start) >> 12;
-        int index = cursor / 8;
-        g_virtual_memory.kernel_map[index] &= ~(1 << cursor % 8);
-        g_virtual_memory.pages_used--;
-
-        printk("[%s] free page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
-               g_virtual_memory.kernel_map[index], g_virtual_memory.pages_used);
-        return;
-    }
-    // 用户逻辑
-    if ((uint) p < g_virtual_memory.user_addr_start || (uint) p > g_virtual_memory.user_addr_max_end) {
-        printk("[%s] invalid address!\n", __FUNCTION__);
-        return;
-    }
-
-    int cursor = (int) (p - g_virtual_memory.user_addr_start) >> 12;
-    int index = cursor / 8;
-    g_virtual_memory.user_map[index] &= ~(1 << cursor % 8);
-    g_virtual_memory.pages_used--;
-
-    printk("[%s] free page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
-           g_virtual_memory.user_map[index], g_virtual_memory.pages_used);
-}
-
-// 将虚拟页映射到物理页
-static void virtual_binding_physical_page(void *virtual_page, void *physical_page) {
-    // 找到一个虚拟地址可以映射到对应的页表项地址
-    uint32* pte_vaddr = get_pte_vaddr(virtual_page);
-    // 修改其值即可
-    *pte_vaddr = (uint) physical_page | 0b111;
-    printk("[%s] bound [0x%x -> 0x%x]\n", __FUNCTION__, virtual_page, physical_page);
-}
-
-// 取消虚拟页到物理页之间的映射关系
-static void *virtual_unbinding_physical_page(void *virtual_page) {
-    // 找到一个虚拟地址可以映射到对应的页表项地址
-    uint32* pte_vaddr = get_pte_vaddr(virtual_page);
-    void *p = (void *) (*pte_vaddr & 0xFFFFF000); // 将其映射的物理页地址返回
-    *pte_vaddr = 0; // 取消关联
-    return p;
-}
-
-
 // 分配虚拟页, 并自动挂载物理页
 static void *_alloc_page(enum pool_flags pf) {
-    // 申请虚拟地址
-    uint *v = (uint *) valloc_page(pf);
-    if (!v) {
-        return NULL;
-    }
-    uint *p = (uint *) palloc_page();
+    // 申请物理页
+    void *p = (void *) alloc_physical_page();
     if (!p) {
-        vfree_page(v, pf);
         return NULL;
     }
-    // 检查虚拟地址是否挂了物理页, 没挂就挂上
-    virtual_binding_physical_page(v, p);
-    return (void *) v;
+    // 申请虚拟页
+    void *v = (void *) alloc_virtual_page(pf, p);
+    if (!v) {
+        free_physical_page(p);
+        return NULL;
+    }
+    return v;
 }
 
 // 释放虚拟页, 并解除和物理页的关联关系
-static void _free_page(void *v, enum pool_flags pf) {
-    // 取消虚拟地址和物理地址的映射关系
-    void *p = virtual_unbinding_physical_page(v);
+static void _free_page(enum pool_flags pf, void *v) {
+    // 释放虚拟页
+    void *p = free_virtual_page(pf, v);
     if (!p) {
-        printk("no physical page found through virtual page: 0x%x\n", v);
+        printk("[%s] err unbound: 0x%x\n", __FUNCTION__, v);
         return;
     }
     // 释放物理页
-    pfree_page(p);
-    // 释放虚拟页
-    vfree_page(v, pf);
+    free_physical_page(p);
     printk("[%s] unbound [0x%x -> 0x%x]\n", __FUNCTION__, v, p);
 }
 
 // 分配一页内核内存（如果开启了虚拟内存，则返回虚拟地址，并自动挂载物理页）
-void *alloc_page() {
+void *alloc_kernel_page() {
     return _alloc_page(PF_KERNEL); // 默认内核申请
 }
 
 // 释放分配一页内核内存（如果开启了虚拟内存，则自动解除该虚拟地址和物理页的关联）
-void free_page(void *v) {
-    _free_page(v, PF_KERNEL); // 默认内核申请
+void free_kernel_page(void *v) {
+    _free_page(PF_KERNEL, v); // 默认内核申请
 }
 
 // 分配一页用户内存（如果开启了虚拟内存，则返回虚拟地址，并自动挂载物理页）
-void *alloc_upage() {
+void *alloc_user_page() {
     return _alloc_page(PF_USER); // 默认内核申请
 }
 
 // 释放分配一页用户内存（如果开启了虚拟内存，则自动解除该虚拟地址和物理页的关联）
-void free_upage(void *v) {
-    _free_page(v, PF_USER); // 默认内核申请
+void free_user_page(void *v) {
+    _free_page(PF_USER, v); // 默认内核申请
 }

@@ -140,7 +140,7 @@ static inline void init_bucket_desc() {
     struct bucket_desc *bdesc, *first;
     int i;
 
-    first = bdesc = (struct bucket_desc *) alloc_page();
+    first = bdesc = (struct bucket_desc *) alloc_kernel_page();
     if (!bdesc) return;
 
     // 一个物理页可以存放 4096>>4 = 256 个bucket描述符结构项
@@ -157,7 +157,7 @@ static inline void init_bucket_desc() {
     free_bucket_desc = first;
 }
 
-void *malloc(size_t len) {
+void *kmalloc(size_t len) {
     struct _bucket_dir *bdir;
     struct bucket_desc *bdesc;
     void *retval;
@@ -168,7 +168,7 @@ void *malloc(size_t len) {
      */
     for (bdir = bucket_dir; bdir->size; bdir++) if (bdir->size >= len) break;
     if (!bdir->size) {
-        printk("malloc called with impossibly large argument (%d)\n", len);
+        printk("kmalloc called with impossibly large argument (%d)\n", len);
         return NULL;
     }
 
@@ -187,11 +187,11 @@ void *malloc(size_t len) {
 
         if (!free_bucket_desc) init_bucket_desc(); // 新建一批bucket
 
-        bdesc = free_bucket_desc;                                                // 分配bucket
-        free_bucket_desc = bdesc->next;                                          // 下一个待分配的bucket
-        bdesc->refcnt = 0;                                                       // 计数初始化
-        bdesc->bucket_size = bdir->size;                                         // 让该bucket以后用于size字节的分配
-        bdesc->page = bdesc->freeptr = (void *) (cp = (char *) alloc_page());    // 申请内存用于分配给调用者
+        bdesc = free_bucket_desc;                                                       // 分配bucket
+        free_bucket_desc = bdesc->next;                                                 // 下一个待分配的bucket
+        bdesc->refcnt = 0;                                                              // 计数初始化
+        bdesc->bucket_size = bdir->size;                                                // 让该bucket以后用于size字节的分配
+        bdesc->page = bdesc->freeptr = (void *) (cp = (char *) alloc_kernel_page());    // 申请内存用于分配给调用者
 
         if (!cp) return NULL; // 没有申请到可用物理页
 
@@ -218,12 +218,12 @@ void *malloc(size_t len) {
 
 /*
  * Here is the free routine.  If you know the size of the object that you
- * are freeing, then free_s() will use that information to speed up the
+ * are freeing, then kmfree_s() will use that information to speed up the
  * search for the bucket descriptor.
  *
- * We will #define a macro so that "free(x)" is becomes "free_s(x, 0)"
+ * We will #define a macro so that "kmfree(x)" is becomes "kmfree_s(x, 0)"
  */
-void free_s(void *obj, int size) {
+void kmfree_s(void *obj, int size) {
     void *page;
     struct _bucket_dir *bdir;
     struct bucket_desc *bdesc, *prev;
@@ -266,7 +266,7 @@ void free_s(void *obj, int size) {
             if (bdir->chain != bdesc) return; // 这里理论上是相等的
             bdir->chain = bdesc->next;        // 如果当前bucket位于首位，则直接将下一个bucket地址作为chain链表地址
         }
-        free_page(bdesc->page); // 释放物理页
+        free_kernel_page(bdesc->page); // 释放物理页
         // 将当前释放的bucket归还到free_bucket_desc链表的的首位，下次优先分配
         bdesc->next = free_bucket_desc;
         free_bucket_desc = bdesc;

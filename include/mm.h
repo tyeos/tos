@@ -72,23 +72,25 @@ uint get_cr3();
 void set_cr3(uint v);
 void enable_page();
 
-// 获取 访问页目录项和页表项物理地址 的虚拟地址
-uint32 *get_pte_vaddr(void *vpage_addr);
-uint32 *get_pde_vaddr(uint pde_index);
+// 分配、释放物理页
+void *alloc_physical_page();
+void free_physical_page(void *p);
+
+// 分配、释放虚拟页 并 挂载、取消挂载物理页
+void *alloc_virtual_page(enum pool_flags pf, void *binding_physical_page);
+void *free_virtual_page(enum pool_flags pf, void *virtual_page);
 
 // 分配、释放内核内存页
-void *alloc_page();
-void free_page(void *p);
+void *alloc_kernel_page();
+void free_kernel_page(void *p);
 
 // 分配、释放用户内存页
-void *alloc_upage();
-void free_upage(void *v);
+void *alloc_user_page();
+void free_user_page(void *p);
 
 // 按字节分配、释放内存
-void *malloc(size_t size);
-void free_s(void *obj, int size);
-#define mfree(x,i) free_s((x), i)
-#define free(x) free_s(x, 0)
-
+void *kmalloc(size_t size);
+void kmfree_s(void *obj, int size);
+#define kmfree(x) kmfree_s(x, 0)
 
 #endif //TOS_MM_H
