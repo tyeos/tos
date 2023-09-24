@@ -72,6 +72,10 @@ uint get_cr3();
 void set_cr3(uint v);
 void enable_page();
 
+// 获取 访问页目录项和页表项物理地址 的虚拟地址
+uint32 *get_pte_vaddr(void *vpage_addr);
+uint32 *get_pde_vaddr(uint pde_index);
+
 // 分配、释放内核内存页
 void *alloc_page();
 void free_page(void *p);

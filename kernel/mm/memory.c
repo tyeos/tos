@@ -24,16 +24,20 @@
 physical_memory_alloc_t g_physical_memory;
 
 /*
- * 虚拟内存的3GB以下分给用户，高1GB给内核
- * 虚拟内存的低1MB映射到物理内存的低1MB处，1MB~2MB之间的物理内存用作页表，所以不会再一对一映射，即1MB以上的虚拟内存可以随意分配。
+ * 虚拟内存的3GB以下分给用户，高1GB给内核，
+ * 内核和用户各自虚拟地址内存空间的低1MB均一一映射到物理地址内存空间的低1MB, 由0页表的前256项映射。
+ * 0页表还可以继续映射3MB的空间，这3MB空间可以映射到任意物理地址，但目前保留不用，
+ * 如果启用，这3MB的物理空间将可以由用户和内核同时访问，即内核和用户各自虚拟地址内存空间的低1MB~4MB之间的空间最终会指向同一块物理地址。
+ * 所以，虚拟地址空间 0x100000~0x3FFFFF(用户) 及 0xC0100000~0xC03FFFFF(内核) 在未来可作为特殊只用，
+ * 普通的虚拟地址空间分配将从 0x400000(用户) 或 0xC0400000(内核) 开始。
  */
 #define KERNEL_MEM_BITMAP_LEN_ADDR 0xE14            // 内存分配对应位图长度的存储地址
 #define KERNEL_MEM_BITMAP_ADDR 0x30000              // 内核内存池的位图存储位置
-#define KERNEL_VIRTUAL_ALLOC_MEMORY_BASE 0xC0100000 // 内核的虚拟地址从哪里开始分配
+#define KERNEL_VIRTUAL_ALLOC_MEMORY_BASE 0xC0400000 // 内核的虚拟地址从哪里开始分配
 #define KERNEL_VIRTUAL_ALLOC_MEMORY_MAX_SIZE (0xFFC00000-KERNEL_VIRTUAL_ALLOC_MEMORY_BASE) // 内核的虚拟地址最多可分配多少字节
 #define USER_MEM_BITMAP_LEN_ADDR 0xE18              // 内存分配对应位图长度的存储地址
 #define USER_MEM_BITMAP_ADDR 0x38000                // 内核内存池的位图存储位置
-#define USER_VIRTUAL_ALLOC_MEMORY_BASE 0x100000     // 用户的虚拟地址从哪里开始分配
+#define USER_VIRTUAL_ALLOC_MEMORY_BASE 0x400000     // 用户的虚拟地址从哪里开始分配
 #define USER_VIRTUAL_ALLOC_MEMORY_MAX_SIZE (0xC0000000-USER_VIRTUAL_ALLOC_MEMORY_BASE) // 用户的虚拟地址最多可分配多少字节
 virtual_memory_alloc_t g_virtual_memory;
 
@@ -300,19 +304,18 @@ static void vfree_page(void *p, enum pool_flags pf) {
 // 将虚拟页映射到物理页
 static void virtual_binding_physical_page(void *virtual_page, void *physical_page) {
     // 找到一个虚拟地址可以映射到对应的页表项地址
-    uint *pte_virtual = (uint *) (0xFFC00000 | (((uint) virtual_page && 0xFFFFF000) >> 10) +
-                                               ((((uint) virtual_page >> 12) & 0x3FF) << 2));
+    uint32* pte_vaddr = get_pte_vaddr(virtual_page);
     // 修改其值即可
-    *pte_virtual = (uint) physical_page | 0b111;
+    *pte_vaddr = (uint) physical_page | 0b111;
+    printk("[%s] bound [0x%x -> 0x%x]\n", __FUNCTION__, virtual_page, physical_page);
 }
 
 // 取消虚拟页到物理页之间的映射关系
 static void *virtual_unbinding_physical_page(void *virtual_page) {
     // 找到一个虚拟地址可以映射到对应的页表项地址
-    uint *pte_virtual = (uint *) (0xFFC00000 | (((uint) virtual_page && 0xFFFFF000) >> 10) +
-                                               ((((uint) virtual_page >> 12) & 0x3FF) << 2));
-    void *p = (void *) (*pte_virtual & 0xFFFFF000); // 将其映射的物理页地址返回
-    *pte_virtual = 0; // 取消关联
+    uint32* pte_vaddr = get_pte_vaddr(virtual_page);
+    void *p = (void *) (*pte_vaddr & 0xFFFFF000); // 将其映射的物理页地址返回
+    *pte_vaddr = 0; // 取消关联
     return p;
 }
 
@@ -338,10 +341,15 @@ static void *_alloc_page(enum pool_flags pf) {
 static void _free_page(void *v, enum pool_flags pf) {
     // 取消虚拟地址和物理地址的映射关系
     void *p = virtual_unbinding_physical_page(v);
+    if (!p) {
+        printk("no physical page found through virtual page: 0x%x\n", v);
+        return;
+    }
     // 释放物理页
     pfree_page(p);
     // 释放虚拟页
     vfree_page(v, pf);
+    printk("[%s] unbound [0x%x -> 0x%x]\n", __FUNCTION__, v, p);
 }
 
 // 分配一页内核内存（如果开启了虚拟内存，则返回虚拟地址，并自动挂载物理页）

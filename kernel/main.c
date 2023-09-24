@@ -18,14 +18,19 @@ void kernel_main(void) {
     idt_init();
     clock_init();
     syscall_init();
-    task_init();
+//    task_init();
     STI
 
-    BOCHS_DEBUG_MAGIC
-    BOCHS_DEBUG_MAGIC
-    
+    void* kpage = alloc_page();
+    void* upage = alloc_upage();
+
+    free_page(kpage);
+    free_upage(upage);
+
+
     while (true) {
-        printk("main block! ");
+//        printk("main block! ");
+        CLI
         HLT
     }
 }
