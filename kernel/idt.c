@@ -237,12 +237,25 @@ void idt_init() {
 }
 
 // 从汇编中回调
-void interrupt_handler_callback(int idt_index, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax, int eip, char cs, int eflags) {
+bool interrupt_handler_callback(int idt_index, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax,
+                                int v0, int v1, int v2, int v3, int v4, int v5) {
     // 由可编程中断控制芯片触发
     if (idt_index >= 0x20 && idt_index < 0x30) {
-        interrupt_handler_pic(idt_index, edi, esi, ebp, esp, ebx, edx, ecx, eax, eip, cs, eflags);
-        return;
+        // 看cs是r0还是r3, 如果是r0, 则没有esp_r3和ss_r3
+        if (!(v1 & 0b11)) v3 = v4 = 0;
+        interrupt_handler_pic(idt_index, edi, esi, ebp, esp, ebx, edx, ecx, eax,
+                              v0, v1, v2, v3, v4);
+        return false;
     }
     // 其他中断，基本都称之为异常 exception (参考 README.md )
-    interrupt_handler_exception(idt_index, edi, esi, ebp, esp, ebx, edx, ecx, eax, eip, cs, eflags);
+    if (interrupt_has_error_code(idt_index)) {
+        if (!(v2 & 0b11)) v4 = v5 = 0;
+        interrupt_handler_exception(idt_index, edi, esi, ebp, esp, ebx, edx, ecx, eax,
+                                    v0, v1, v2, v3, v4, v5);
+        return true;
+    }
+    if (!(v1 & 0b11)) v3 = v4 = 0;
+    interrupt_handler_exception(idt_index, edi, esi, ebp, esp, ebx, edx, ecx, eax,
+                                0, v0, v1, v2, v3, v4);
+    return false;
 }

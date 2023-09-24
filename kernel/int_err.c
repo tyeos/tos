@@ -65,17 +65,23 @@ char *messages[] = {
 };
 
 
-// 异常处理
-void interrupt_handler_exception(int vector_no, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax, int eip, char cs, int eflags) {
+bool interrupt_has_error_code(int vector_no) {
+    return vector_no == 8 || vector_no == 17 || (vector_no >= 10 && vector_no <= 14);
+}
+
+void interrupt_handler_exception(int vector_no, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax,
+                                 int err_code, int eip, int cs, int eflags, int esp_r3, int ss_r3) {
     printk("\n============================\n");
     printk("EXCEPTION : %s \n", messages[vector_no]);
     printk("   VECTOR : 0x%02X\n", vector_no);
     printk("   EFLAGS : 0x%08X\n", eflags);
     printk("       CS : 0x%02X\n", cs);
     printk("      EIP : 0x%08X\n", eip);
+    printk("ERROR CODE: 0x%X\n", err_code);
     printk("      ESP : 0x%08X\n", esp);
     printk("============================\n");
 
+    // 错误必须恢复才可正常返回
     while (true) {
         printk("ERROR STOP!\n");
         CLI

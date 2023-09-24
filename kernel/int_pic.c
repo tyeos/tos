@@ -32,7 +32,8 @@ void clock_interrupt_handler() {
 }
 
 // 可编程中断控制器（8259A）的中断处理
-void interrupt_handler_pic(int vector_no, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax, int eip,char cs, int eflags) {
+void interrupt_handler_pic(int vector_no, int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax,
+                           int eip,int cs, int eflags, int esp_r3, int ss_r3) {
     send_eoi(vector_no);
     switch (vector_no) {
         case 0x20:// 时钟中断
