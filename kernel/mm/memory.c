@@ -5,6 +5,8 @@
 #include "../../include/mm.h"
 #include "../../include/print.h"
 #include "../../include/string.h"
+#include "../../include/sys.h"
+#include "../../include/bridge/eflags.h"
 
 #define ARDS_TIMES_ADDR 0xE00
 #define ARDS_BUFFER_ADDR 0x1000
@@ -192,20 +194,20 @@ static void _free_page(enum pool_flags pf, void *v) {
 
 // 分配一页内核内存（如果开启了虚拟内存，则返回虚拟地址，并自动挂载物理页）
 void *alloc_kernel_page() {
-    return _alloc_page(PF_KERNEL); // 默认内核申请
+    return _alloc_page(PF_KERNEL);
 }
 
 // 释放分配一页内核内存（如果开启了虚拟内存，则自动解除该虚拟地址和物理页的关联）
 void free_kernel_page(void *v) {
-    _free_page(PF_KERNEL, v); // 默认内核申请
+    _free_page(PF_KERNEL, v);
 }
 
 // 分配一页用户内存（如果开启了虚拟内存，则返回虚拟地址，并自动挂载物理页）
 void *alloc_user_page() {
-    return _alloc_page(PF_USER); // 默认内核申请
+    return _alloc_page(PF_USER);
 }
 
 // 释放分配一页用户内存（如果开启了虚拟内存，则自动解除该虚拟地址和物理页的关联）
 void free_user_page(void *v) {
-    _free_page(PF_USER, v); // 默认内核申请
+    _free_page(PF_USER, v);
 }

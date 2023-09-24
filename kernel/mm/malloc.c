@@ -6,6 +6,7 @@
 #include "../../include/mm.h"
 #include "../../include/sys.h"
 #include "../../include/print.h"
+#include "../../include/bridge/eflags.h"
 
 
 /*
@@ -175,7 +176,9 @@ void *kmalloc(size_t len) {
     /*
      * Now we search for a bucket descriptor which has free space
      */
-    CLI    /* Avoid race conditions */
+    // 如果响应中断, 则临时关闭
+    bool ack_int = get_if_flag();
+    if (ack_int) CLI /* Avoid race conditions */
     for (bdesc = bdir->chain; bdesc; bdesc = bdesc->next) if (bdesc->freeptr) break;
 
     /*
@@ -211,7 +214,8 @@ void *kmalloc(size_t len) {
     bdesc->freeptr = *((void **) retval);   // 从低地址处取一个指针变量值，即下一个item的内存地址
     bdesc->refcnt++;                        // 分配一次，对应bucket计数+1
 
-    STI    /* OK, we're safe again */
+    // 如果之前响应中断, 则恢复
+    if (ack_int) STI /* OK, we're safe again */
 
     return (retval);
 }
@@ -245,33 +249,40 @@ void kmfree_s(void *obj, int size) {
     return;
 
     found:
-    CLI
+    {
+        // 如果响应中断, 则临时关闭
+        bool ack_int = get_if_flag();
+        if (ack_int) CLI
 
-    *((void **) obj) = bdesc->freeptr; // 将下一个待分配的item地址存到当前要释放的item低地址指针处
-    bdesc->freeptr = obj;              // 下次优先分配当前准备释放的item
-    bdesc->refcnt--;                   // 引用计数-1
+        *((void **) obj) = bdesc->freeptr; // 将下一个待分配的item地址存到当前要释放的item低地址指针处
+        bdesc->freeptr = obj;              // 下次优先分配当前准备释放的item
+        bdesc->refcnt--;                   // 引用计数-1
 
-    // 引用计数归零，则释放当前bucket
-    if (bdesc->refcnt == 0) {
-        /*
-         * We need to make sure that prev is still accurate. It may not be, if someone rudely interrupted us....
-         */
-        // 在bucket目录的链表中，前一个bucket(prev)位于当前准备释放的bucket(bdesc)之前
-        // 这里先保证前一个bucket的next指针指向当前bucket地址
-        if ((prev && (prev->next != bdesc)) || (!prev && (bdir->chain != bdesc)))
-            for (prev = bdir->chain; prev; prev = prev->next) if (prev->next == bdesc) break;
+        // 引用计数归零，则释放当前bucket
+        if (bdesc->refcnt == 0) {
+            /*
+             * We need to make sure that prev is still accurate. It may not be, if someone rudely interrupted us....
+             */
+            // 在bucket目录的链表中，前一个bucket(prev)位于当前准备释放的bucket(bdesc)之前
+            // 这里先保证前一个bucket的next指针指向当前bucket地址
+            if ((prev && (prev->next != bdesc)) || (!prev && (bdir->chain != bdesc)))
+                for (prev = bdir->chain; prev; prev = prev->next) if (prev->next == bdesc) break;
 
-        if (prev) prev->next = bdesc->next; // 将当前bucket释放，上一个bucket的next指针指向当前bucket的next
-        else {
-            if (bdir->chain != bdesc) return; // 这里理论上是相等的
-            bdir->chain = bdesc->next;        // 如果当前bucket位于首位，则直接将下一个bucket地址作为chain链表地址
+            if (prev) prev->next = bdesc->next; // 将当前bucket释放，上一个bucket的next指针指向当前bucket的next
+            else {
+                if (bdir->chain != bdesc) {
+                    printk("bdir err: 0x%x -> 0x%x\n", bdir->chain, bdesc);
+                    return; // 这里理论上是相等的
+                }
+                bdir->chain = bdesc->next;        // 如果当前bucket位于首位，则直接将下一个bucket地址作为chain链表地址
+            }
+            free_kernel_page(bdesc->page); // 释放物理页
+            // 将当前释放的bucket归还到free_bucket_desc链表的的首位，下次优先分配
+            bdesc->next = free_bucket_desc;
+            free_bucket_desc = bdesc;
         }
-        free_kernel_page(bdesc->page); // 释放物理页
-        // 将当前释放的bucket归还到free_bucket_desc链表的的首位，下次优先分配
-        bdesc->next = free_bucket_desc;
-        free_bucket_desc = bdesc;
-    }
 
-    STI
-    return;
+        // 如果之前响应中断, 则恢复
+        if (ack_int) STI
+    }
 }

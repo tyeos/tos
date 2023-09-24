@@ -421,10 +421,38 @@ static uint32 *get_pte_vaddr(void *vpage_addr) {
 }
 
 /*
- * 提供通过虚拟地址访问页目录项的方法:
- *      通过虚拟地址获取其对应的页目录项
+ * 提供通过虚拟地址访问页表的方法
+ *      通过虚拟地址的pde_index获取其对应的页表
  */
-static uint32 *get_pde_vaddr(void *vpage_addr) {
+static void *get_pt_vaddr(uint32 pde_index) {
+    /*
+     -------------------------------------------------------------------------------------------------------------------
+     * 要构建的目标虚拟地址 (构建规则参考:特殊情况2)：
+     ----------------------------------------------------------------------
+        -------------------------------------------------------------
+        | 31  | 30  | 29  | 28  | 27  | 26  | 25  | 24  | 23  | 22  |
+        |                          0x3FF                            |
+        -------------------------------------------------------------
+        -------------------------------------------------------------
+        | 21  | 20  | 19  | 18  | 17  | 16  | 15  | 14  | 13  | 12  |
+        |                          pteIndex                         |
+        -------------------------------------------------------------
+        -------------------------------------------------------------------------
+        | 11  | 10  |  9  |  8  |  7  |  6  |  5  |  4  |  3  |  2  |  1  |  0  |
+        |                                  0x0                                  |
+        -------------------------------------------------------------------------
+     -------------------------------------------------------------------------------------------------------------------
+     */
+    // 最终返回页表的虚拟访问地址，该地址可以访问4KB的空间, 对应的就是页表的物理地址
+    void *pte_virtual_addr = (uint32 *) (0xFFC00000 | (pde_index << 12));
+    return pte_virtual_addr;
+}
+
+/*
+ * 提供通过虚拟地址访问页目录项的方法:
+ *      通过虚拟地址的pde_index获取其对应的页目录项
+ */
+static uint32 *get_pde_vaddr(uint32 pde_index) {
     /*
      -------------------------------------------------------------------------------------------------------------------
      * 要构建的目标虚拟地址 (构建规则参考:特殊情况2的特殊情况2)：
@@ -438,24 +466,9 @@ static uint32 *get_pde_vaddr(void *vpage_addr) {
         |                          offset                           |  0  |  0  |
         -------------------------------------------------------------------------
      -------------------------------------------------------------------------------------------------------------------
-     * 传入的虚拟地址（一般为虚拟页地址，即低12位均为0）
-     ----------------------------------------------------------------------
-        -------------------------------------------------------------
-        | 31  | 30  | 29  | 28  | 27  | 26  | 25  | 24  | 23  | 22  |
-        |  作为目标地址的offset的高10位，即将4KB空间分为1024份，每份4字节    |
-        -------------------------------------------------------------
-        -------------------------------------------------------------
-        | 21  | 20  | 19  | 18  | 17  | 16  | 15  | 14  | 13  | 12  |
-        |                           保留不用                          |
-        -------------------------------------------------------------
-        -------------------------------------------------------------------------
-        | 11  | 10  |  9  |  8  |  7  |  6  |  5  |  4  |  3  |  2  |  1  |  0  |
-        |                              保留不用                                   |
-        -------------------------------------------------------------------------
-     -------------------------------------------------------------------------------------------------------------------
      */
     // 最终返回长度为4字节的虚拟访问地址，这4字节对应的就是页目录项的物理地址
-    uint32 *pde_virtual_addr = (uint32 *) (0xFFFFF000 | ((uint32) vpage_addr & 0xFFC00000) >> 20);
+    uint32 *pde_virtual_addr = (uint32 *) (0xFFFFF000 | (pde_index << 2));
     return pde_virtual_addr;
 }
 
@@ -565,20 +578,22 @@ void *alloc_virtual_page(enum pool_flags pf, void *binding_physical_page) {
     // 申请虚拟地址
     void *virtual_page = _alloc_virtual_page(pf);
     // 获取页目录项的访问指针
-    uint32 *pde_vaddr = get_pde_vaddr(virtual_page);
+    uint32 pde_index = (uint32) virtual_page >> 22;
+    uint32 *pde_vaddr = get_pde_vaddr(pde_index);
+
     /*
-     * 检查P位：
+     * 检查页目录项的P位：
      *      如果为1，表示页表可用。
      *      如果为0，需先申请页表地址，并挂载，将位置1。
      */
     if (!(*pde_vaddr & 0b1)) {
         void *paddr = alloc_physical_page(); // 物理地址
         *pde_vaddr = (uint32) paddr | 0b111; // 页属性，US=User, RW=1, P=1
-        uint32 pte_index = (uint32) virtual_page >> 22;
-        pdt_entry_counter[pte_index]++;
-        printk("[%s] create pde [0x%x -> 0x%x]\n", __FUNCTION__, pte_index, paddr);
+        // 获取页表的访问指针
+        void *pt_vaddr = get_pt_vaddr(pde_index);
+        memset(pt_vaddr, 0, PAGE_SIZE); // 将页清空
+        printk("[%s] create pde [0x%x -> 0x%x]\n", __FUNCTION__, pde_index, paddr);
     }
-
     // 获取访问页表项的指针
     uint32 *pte_vaddr = get_pte_vaddr(virtual_page);
     // 修改页目表项的值
@@ -587,7 +602,10 @@ void *alloc_virtual_page(enum pool_flags pf, void *binding_physical_page) {
     } else {
         *pte_vaddr = (uint32) binding_physical_page | 0b111; // 页属性，US=User, RW=1, P=1
     }
-    printk("[%s] bound [0x%x -> 0x%x]\n", __FUNCTION__, virtual_page, binding_physical_page);
+
+    pdt_entry_counter[pde_index]++;
+    printk("[%s] bound [0x%x -> 0x%x], pte total %d\n", __FUNCTION__, virtual_page, binding_physical_page,
+           pdt_entry_counter[pde_index]);
     return virtual_page;
 }
 
@@ -600,26 +618,29 @@ void *free_virtual_page(enum pool_flags pf, void *virtual_page) {
     // 获取访问页表项的指针
     uint32 *pte_vaddr = get_pte_vaddr(virtual_page);
     // 释放虚拟页
-    void *unbinding_physical_page = (void *) (*pte_vaddr & 0xFFFFF000); // 将其映射的物理页地址返回
-    *pte_vaddr = 0; // 取消关联
+    void *unbinding_physical_page = (void *) (*pte_vaddr & 0xFFFFF000); // 将其挂载的物理页地址返回
+    *pte_vaddr = 0; // 取消挂载
 
     // 检查如果页表项完都释放了，则对应页表也释放
+    uint32 pde_index = (uint32) virtual_page >> 22;
+    pdt_entry_counter[pde_index]--; // 挂载数-1
 
-    uint32 pte_index = (uint32) virtual_page >> 22;
-    if (pdt_entry_counter[pte_index] <= 1) {
-        pdt_entry_counter[pte_index]--;
+    if (pdt_entry_counter[pde_index] <= 0) {
         // 获取页目录项的访问指针
-        uint32 *pde_vaddr = get_pde_vaddr(virtual_page);
+        uint32 *pde_vaddr = get_pde_vaddr(pde_index);
         // 获取页表地址
         uint32 paddr = *pde_vaddr & 0xFFFFF000;
         // 取消页目录项和页表的关联
         *pde_vaddr = 0;
         // 释放页表地址
         free_physical_page((void *) paddr);
+        printk("[%s] free pde [0x%x -> 0x%x]\n", __FUNCTION__, pde_index, paddr);
     }
 
     // 释放虚拟地址
     _free_virtual_page(pf, virtual_page);
+    printk("[%s] unbound [0x%x -> 0x%x], pte rest %d\n", __FUNCTION__, virtual_page, unbinding_physical_page,
+           pdt_entry_counter[pde_index]);
     return unbinding_physical_page;
 }
 
