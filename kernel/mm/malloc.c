@@ -158,6 +158,9 @@ static inline void init_bucket_desc() {
     free_bucket_desc = first;
 }
 
+/*
+ * 该方法一旦使用，则至少一个物理页不会被释放，其用于待分配的bucket链表缓存：free_bucket_desc
+ */
 void *kmalloc(size_t len) {
     struct _bucket_dir *bdir;
     struct bucket_desc *bdesc;
