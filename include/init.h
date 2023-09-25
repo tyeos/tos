@@ -5,6 +5,9 @@
 #ifndef TOS_INIT_H
 #define TOS_INIT_H
 
+void physical_memory_init();
+void virtual_memory_init();
+
 void gdt_init();
 void idt_init();
 

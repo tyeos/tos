@@ -22,51 +22,28 @@ typedef struct {
     ards_t *ards; // 地址范围描述符结构
 } checked_memory_info_t;
 
+/*
+ * 地址内存池，所有内存地址分配都用这一套
+ */
+typedef struct memory_alloc_t {
+    uint addr_start;     // 有效内存起始地址
+    uint addr_end;       // 有效内存结束地址
+    uint available_size; // 有效内存大小（ addr_end - addr_start + 1 ）
+    uint pages_total;    // 有效内存页数 ( available_size >> 12 )
+    uint pages_used;     // 已分配的内存页数
+    uint alloc_cursor;   // 内存分配游标, 指向下一次分配page在位图中对应bit的位置
+    uint bitmap_bytes;   // 位图占用字节数, 物理内存理论最大值为4GB>>12>>3, 即128KB=131072, 实际4G物理空间不可能全允许分配使用
+    uint8 *bitmap;       // 位图，记录页分配情况，1bit映射一个page, 1byte映射8个page
+} memory_alloc_t;
 
-typedef struct {
-    uint addr_start;     // 可用内存起始地址
-    uint addr_end;       // 可用内存结束地址
-    uint available_size; // 可用内存大小
-    uint pages_total;    // 机器物理内存共多少page
-    uint pages_free;     // 机器物理内存还剩多少page
-    uint pages_used;     // 机器物理内存用了多少page
-    uint alloc_cursor;   // 内存分配游标
-    uint32 *map_len;     // 记录位图最大使用长度，理论最大值为4GB>>12>>3，即128KB=131072，但实际4G物理空间不可能全允许分配使用, 虚拟机上更是远小于该理论值
-    uint8 *map;          // 用位图记录使用情况，1bit映射一个page, 1byte映射8个page
-} physical_memory_alloc_t;
-
-
-typedef struct {
-    uint kernel_addr_start;     // 内核虚拟内存分配的起始地址
-    uint kernel_max_available_size; // 内核最大可分配的虚拟内存大小
-    uint kernel_addr_max_end;       // 内核虚拟内存分配的最大结束地址
-    uint kernel_max_pages; // 内核虚拟内存最多可以有多少page
-    uint kernel_alloc_cursor;   // 内核虚拟内存分配游标
-
-    uint user_addr_start;       // 用户虚拟内存分配的起始地址
-    uint user_max_available_size;   // 用户最大可分配的虚拟内存大小
-    uint user_addr_max_end;         // 用户虚拟内存分配的最大结束地址
-    uint user_max_pages; // 用户虚拟内存最多可以有多少page
-    uint user_alloc_cursor;     // 用户虚拟内存分配游标
-
-    uint pages_used;            // 虚拟内存已经分配了多少page（用户+内核）
-
-    uint32 *kernel_map_len;     // 内核位图占用的字节长度
-    uint32 *user_map_len;       // 用户位图占用的字节长度
-
-    uint8 *kernel_map;          // 内核位图，记录内存使用情况，1bit映射一个page, 1byte映射8个page
-    uint8 *user_map;            // 用户位图，记录内存使用情况，1bit映射一个page, 1byte映射8个page
-
-} virtual_memory_alloc_t;
-
-// 内存池标记，用于判断用哪个内存池
+/*
+ * 内存池标记，用于判断用哪个内存池
+ * 这里只针对虚拟地址
+ */
 enum pool_flags {
-    PF_KERNEL = 1,  //内核内存池
-    PF_USER = 2     //用户内存池
+    PF_KERNEL = 1,  // 内核内存池
+    PF_USER = 2     // 用户内存池
 };
-
-void memory_init();
-void virtual_memory_init();
 
 uint get_cr3();
 void set_cr3(uint v);
@@ -76,19 +53,18 @@ void enable_page();
 void *alloc_physical_page();
 void free_physical_page(void *p);
 
-// 分配、释放虚拟页 并 挂载、取消挂载物理页
-void *alloc_virtual_page(enum pool_flags pf, void *binding_physical_page);
-void *free_virtual_page(enum pool_flags pf, void *virtual_page);
-
-// 分配、释放内核内存页
+// 分配、释放内核内存页（虚拟页）
 void *alloc_kernel_page();
 void free_kernel_page(void *p);
 
-// 分配、释放用户内存页
+// 分配、释放用户内存页（虚拟页）
 void *alloc_user_page();
 void free_user_page(void *p);
 
-// 按字节分配、释放内存
+// 将虚拟地址转为物理地址
+void *v2p_addr(void *vaddr);
+
+// 按字节分配、释放内存（内核虚拟页）
 void *kmalloc(size_t size);
 void kmfree_s(void *obj, int size);
 #define kmfree(x) kmfree_s(x, 0)

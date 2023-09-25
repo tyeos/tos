@@ -136,6 +136,9 @@ typedef struct task_t {
     uint8 priority;           // 任务优先级，值越大级别越高
     char name[16];            // 线程名称
 
+    uint32 *pgdir;                   // 进程页目录表的虚拟地址
+    memory_alloc_t user_vaddr_alloc; // 用户进程的虚拟地址池
+
 } __attribute__((packed)) task_t;
 
 void task_init();

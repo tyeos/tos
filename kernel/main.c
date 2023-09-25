@@ -12,7 +12,8 @@
 
 void kernel_main(void) {
     console_clear();
-    memory_init();
+    physical_memory_init();
+    virtual_memory_init();
     gdt_init();
     idt_init();
     clock_init();

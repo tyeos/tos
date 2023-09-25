@@ -7,6 +7,9 @@
 
 #include "types.h"
 
+#define PAGE_DIR_PHYSICAL_ADDR 0x100000         // 页目录表物理地址, 低1MB空间之上的第一个字节
+#define PAGE_TAB_ITEM0_PHYSICAL_ADDR 0x101000   // 第0个页表物理地址, 页表空间之上的第一个字节
+
 // 全局描述符（全局描述符表项）结构
 typedef struct global_descriptor {
     uint16 limit_low;     // 段界限的 0 ~ 15 位
