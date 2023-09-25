@@ -12,9 +12,7 @@ static char buf[1024];
 extern int vsprintf(char *buf, const char *fmt, va_list args);
 
 int printk(const char * fmt, ...) {
-    // 如果响应中断, 则临时关闭
-    bool ack_int = get_if_flag();
-    if (ack_int) CLI
+    bool iflag = check_close_if();
 
     // 处理参数并输出信息到控制台
     va_list args;
@@ -24,8 +22,6 @@ int printk(const char * fmt, ...) {
     va_end(args);
     console_write(buf, size);
 
-    // 如果之前响应中断, 则恢复
-    if (ack_int) STI
-
+    check_recover_if(iflag);
     return size;
 }

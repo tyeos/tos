@@ -179,9 +179,7 @@ void *kmalloc(size_t len) {
     /*
      * Now we search for a bucket descriptor which has free space
      */
-    // 如果响应中断, 则临时关闭
-    bool ack_int = get_if_flag();
-    if (ack_int) CLI /* Avoid race conditions */
+    bool iflag = check_close_if();  /* Avoid race conditions */
     for (bdesc = bdir->chain; bdesc; bdesc = bdesc->next) if (bdesc->freeptr) break;
 
     /*
@@ -199,7 +197,10 @@ void *kmalloc(size_t len) {
         bdesc->bucket_size = bdir->size;                                                // 让该bucket以后用于size字节的分配
         bdesc->page = bdesc->freeptr = (void *) (cp = (char *) alloc_kernel_page());    // 申请内存用于分配给调用者
 
-        if (!cp) return NULL; // 没有申请到可用物理页
+        if (!cp) {
+            check_recover_if(iflag);
+            return NULL; // 没有申请到可用物理页
+        }
 
         /* Set up the chain of free objects */
         for (i = PAGE_SIZE / bdir->size; i > 1; i--) {  // 将申请的内存页按size分成N等份，每份(item)占用size字节
@@ -218,7 +219,7 @@ void *kmalloc(size_t len) {
     bdesc->refcnt++;                        // 分配一次，对应bucket计数+1
 
     // 如果之前响应中断, 则恢复
-    if (ack_int) STI /* OK, we're safe again */
+    check_recover_if(iflag); /* OK, we're safe again */
 
     return (retval);
 }
@@ -253,9 +254,7 @@ void kmfree_s(void *obj, int size) {
 
     found:
     {
-        // 如果响应中断, 则临时关闭
-        bool ack_int = get_if_flag();
-        if (ack_int) CLI
+        bool iflag = check_close_if();
 
         *((void **) obj) = bdesc->freeptr; // 将下一个待分配的item地址存到当前要释放的item低地址指针处
         bdesc->freeptr = obj;              // 下次优先分配当前准备释放的item
@@ -275,6 +274,7 @@ void kmfree_s(void *obj, int size) {
             else {
                 if (bdir->chain != bdesc) {
                     printk("bdir err: 0x%x -> 0x%x\n", bdir->chain, bdesc);
+                    check_recover_if(iflag);
                     return; // 这里理论上是相等的
                 }
                 bdir->chain = bdesc->next;        // 如果当前bucket位于首位，则直接将下一个bucket地址作为chain链表地址
@@ -286,6 +286,6 @@ void kmfree_s(void *obj, int size) {
         }
 
         // 如果之前响应中断, 则恢复
-        if (ack_int) STI
+        check_recover_if(iflag);
     }
 }
