@@ -53,4 +53,6 @@ typedef struct dt_ptr {
 } dt_ptr;
 #pragma pack()
 
+void update_tss_esp(uint32 esp0);
+
 #endif //TOS_DT_H

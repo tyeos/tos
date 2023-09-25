@@ -149,8 +149,8 @@ void free_physical_page(void *p) {
         return;
     }
 
-    int cursor = (int) (p - g_physical_memory.addr_start) >> 12;
-    int index = cursor / 8;
+    uint cursor = (uint) (p - g_physical_memory.addr_start) >> 12;
+    uint index = cursor / 8;
     g_physical_memory.bitmap[index] &= ~(1 << cursor % 8);
     g_physical_memory.pages_used--;
 

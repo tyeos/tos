@@ -138,7 +138,7 @@ uint32 get_current_task_pid() {
     return current_task->pid;
 }
 
-static task_t *create_task(char *name, uint8 priority, task_func_t func) {
+static task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func) {
     // 创建任务
     task_t *task = alloc_kernel_page();
     memset(task, 0, PAGE_SIZE);
@@ -147,12 +147,38 @@ static task_t *create_task(char *name, uint8 priority, task_func_t func) {
     task->pid = alloc_bit(&pids);
     task->func = func;
     task->elapsed_ticks = 0;
-    task->stack = (uint32) task + PAGE_SIZE;
+    task->kstack = (uint32) task + PAGE_SIZE;
 
     task->state = TASK_READY;
     task->ticks = priority;
     task->priority = priority;
     strcpy(task->name, name);
+
+    // 添加到任务队列末尾
+    chain_put_last(&tasks, &task->chain_elem);
+    return task;
+}
+
+static task_t *create_user_process(char *name, uint8 priority, task_func_t func) {
+    // 创建任务
+    task_t *task = alloc_kernel_page();
+    memset(task, 0, PAGE_SIZE);
+
+    // task初始化
+    task->pid = alloc_bit(&pids);
+    task->func = func;
+    task->elapsed_ticks = 0;
+    task->kstack = (uint32) task + PAGE_SIZE;
+
+    task->state = TASK_READY;
+    task->ticks = priority;
+    task->priority = priority;
+    strcpy(task->name, name);
+
+    // 用户进程有自己的页目录表
+    task->pgdir = create_virtual_page_dir();
+    // 虚拟地址池初始化
+    user_virtual_memory_alloc_init(&task->user_vaddr_alloc);
 
     // 添加到任务队列末尾
     chain_put_last(&tasks, &task->chain_elem);
@@ -179,9 +205,9 @@ static void *kernel_task_b(void *args) {
 extern void *move_to_user_mode(void *args);
 
 static void *idle(void *args) {
-//    create_task("K_A", 2, kernel_task_a);
-    create_task("K_B", 2, kernel_task_b);
-    create_task("U_PA", 1, move_to_user_mode);
+    create_kernel_thread("K_A", 2, kernel_task_a);
+    create_kernel_thread("K_B", 2, kernel_task_b);
+    create_user_process("U_PA", 1, move_to_user_mode);
 //    create_task("U_PB", 1, move_to_user_mode);
 
     for (int i = 0;; ++i) {
@@ -200,6 +226,6 @@ void task_init() {
 
     chain_init(&tasks);
 
-    idle_task = create_task("idle", 1, idle); // 第一个创建的任务，pid一定为0
+    idle_task = create_kernel_thread("idle", 1, idle); // 第一个创建的任务，pid一定为0
 }
 

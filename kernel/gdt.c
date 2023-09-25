@@ -89,7 +89,7 @@ int r3_data_selector = R3_DATA_GDT_ENTRY_INDEX << 3 | 0b011; // TI=GDT, RPL=3
 int tss_selector = TSS_GDT_ENTRY_INDEX << 3; // TI=GDT, RPL=0
 
 
-void set_gdt_tss_entry() {
+static void set_gdt_tss_entry() {
     printk("init tss...\n");
 
     /*
@@ -172,7 +172,7 @@ static void set_gdt_entry(int gdt_index, char type, char dpl) {
 /*
  * 修复在实模式下创建的GDT项, 使其符合虚拟地址分页模式规划
  */
-void gdt_virtual_model_fix() {
+static void gdt_virtual_model_fix() {
     /*
      * 开启虚拟模式后，对于低1MB的空间地址，有以下映射关系：
      *      0x00000000~0x000FFFFF => 0x00000000~0x000FFFFF
