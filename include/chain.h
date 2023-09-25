@@ -11,19 +11,18 @@
 typedef struct chain_elem_t {
     struct chain_elem_t *prev; // previous 前驱节点
     struct chain_elem_t *next; // 后继节点
-    void *value;
 } chain_elem_t;
 
 /*
  链表结构:
-              +--------chain------------size-------------------+
+              +--------------------size-------------------+
      head <=> | elem_0 <=> elem_1 <=> elem_... <=> elem_n | <=> tail
               +-------------------------------------------+
  */
 typedef struct chain_t {
-    chain_elem_t *head; // 头部节点
-    chain_elem_t *tail; // 尾部节点
-    uint32 size; // 正在使用的链表长度
+    chain_elem_t head; // 头部节点
+    chain_elem_t tail; // 尾部节点
+    uint32 size;       // 正在使用的链表长度
 } chain_t;
 
 // 初始化链表

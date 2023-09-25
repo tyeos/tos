@@ -10,8 +10,8 @@
 #include "../include/string.h"
 
 
-bitmap_t *pids;
-chain_t *tasks;
+bitmap_t pids;
+chain_t tasks;
 
 task_t *current_task = NULL;
 task_t *idle_task;
@@ -21,7 +21,7 @@ task_t *idle_task;
  * 进行一次任务调度滴答，执行完成current_task即更新
  */
 void task_scheduler_ticks() {
-    if (tasks == NULL) return;
+    if (tasks.size == 0) return;
 
     // 检查当前任务
     if (current_task != NULL) {
@@ -38,9 +38,11 @@ void task_scheduler_ticks() {
     }
 
     // 换下一个任务
-    for (int i = 0; i < tasks->size; ++i) {
-        task_t *task = chain_pop_first(tasks)->value;
-        chain_put_last(tasks, task->chain_elem); // 取出后添加到最后
+    for (int i = 0; i < tasks.size; ++i) {
+
+        // 元素指针地址 减去 元素在结构体内的偏移量, 也可直接 &0xFFFFF000 获取PCB地址，因为task地址都是按页分配的
+        task_t *task = (task_t *) ((char*) chain_pop_first(&tasks) - (uint32) (&((task_t *) NULL)->chain_elem));
+        chain_put_last(&tasks, &task->chain_elem); // 取出后添加到最后
         if (task->state != TASK_READY) continue;
 
         task->ticks--;
@@ -55,32 +57,33 @@ void task_scheduler_ticks() {
 static void clear_task(task_t *task) {
     printk("ready clear task %p\n", task);
     task->state = TASK_DIED;
-    chain_remove(tasks, task->chain_elem);
-    kmfree_s(task->chain_elem, sizeof(chain_elem_t));
-    free_bit(pids, task->pid);
+    chain_remove(&tasks, &task->chain_elem);
+    free_bit(&pids, task->pid);
     free_kernel_page(task);
 }
 
 // 任务执行完成，退出任务
 uint32 exit_current_task() {
     if (current_task == NULL) return 0;
+
     bool is_idle = current_task == idle_task;
     uint32 ssp = current_task->tss.ssp;
+
     clear_task(current_task);
     current_task = NULL;
 
     // 若idle任务终止，则清理所有任务
     if (is_idle) {
         idle_task = NULL;
-        for (int i = 0; i < tasks->size; ++i) {
-            clear_task(chain_pop_first(tasks)->value);
+        for (int i = 0; i < tasks.size; ++i) {
+            clear_task((task_t *) ((uint32) chain_pop_first(&tasks) & 0xFFFFF000));
         }
         return ssp; // 只有idle进程结束, ssp才有意义，即跳回到main
     }
 
     // 其他任务的终止，换到idle上来调度
-    chain_remove(tasks, idle_task->chain_elem);
-    chain_put_last(tasks, idle_task->chain_elem);
+    chain_remove(&tasks, &idle_task->chain_elem);
+    chain_put_last(&tasks, &idle_task->chain_elem);
     current_task = idle_task;
     return 0;
 }
@@ -95,24 +98,19 @@ static task_t *create_task(char *name, uint8 priority, task_func_t func) {
     task_t *task = alloc_kernel_page();
     memset(task, 0, PAGE_SIZE);
 
-    // 任务队列item
-    chain_elem_t *elem = kmalloc(sizeof(chain_elem_t));
-
     // task初始化
-    task->pid = alloc_bit(pids);
+    task->pid = alloc_bit(&pids);
     task->func = func;
-    task->state = TASK_READY;
     task->elapsed_ticks = 0;
-    task->chain_elem = elem;
-
     task->stack = (uint32) task + PAGE_SIZE;
+
+    task->state = TASK_READY;
     task->ticks = priority;
     task->priority = priority;
     strcpy(task->name, name);
 
     // 添加到任务队列末尾
-    elem->value = task;
-    chain_put_last(tasks, elem);
+    chain_put_last(&tasks, &task->chain_elem);
     return task;
 }
 
@@ -150,16 +148,12 @@ static void *idle(void *args) {
 }
 
 void task_init() {
-    pids = kmalloc(sizeof(bitmap_t));
-    pids->map = kmalloc(1024 >> 3); // 最多支持分配1024个任务
-    pids->cursor = 0;
-    pids->used = 0;
-    pids->total_bits = 1024;
+    pids.map = kmalloc(1024 >> 3); // 最多支持分配1024个任务
+    pids.cursor = 0;
+    pids.used = 0;
+    pids.total_bits = 1024;
 
-    tasks = kmalloc(sizeof(chain_t));
-    tasks->head = kmalloc(sizeof(chain_elem_t));
-    tasks->tail = kmalloc(sizeof(chain_elem_t));
-    chain_init(tasks);
+    chain_init(&tasks);
 
     idle_task = create_task("idle", 1, idle); // 第一个创建的任务，pid一定为0
 }

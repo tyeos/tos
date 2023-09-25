@@ -165,6 +165,8 @@ void free_physical_page(void *p) {
 
 // 分配虚拟页, 并自动挂载物理页
 static void *_alloc_page(enum pool_flags pf) {
+    printk("===============================================================================\n");
+    printk("------------------------------- alloc_page begin ------------------------------\n");
     // 申请物理页
     void *p = (void *) alloc_physical_page();
     if (!p) {
@@ -176,11 +178,15 @@ static void *_alloc_page(enum pool_flags pf) {
         free_physical_page(p);
         return NULL;
     }
+    printk("------------------------------- alloc_page end --------------------------------\n");
+    printk("===============================================================================\n");
     return v;
 }
 
 // 释放虚拟页, 并解除和物理页的关联关系
 static void _free_page(enum pool_flags pf, void *v) {
+    printk("===============================================================================\n");
+    printk("------------------------------- free_page begin -------------------------------\n");
     // 释放虚拟页
     void *p = free_virtual_page(pf, v);
     if (!p) {
@@ -189,7 +195,9 @@ static void _free_page(enum pool_flags pf, void *v) {
     }
     // 释放物理页
     free_physical_page(p);
-    printk("[%s] unbound [0x%x -> 0x%x]\n", __FUNCTION__, v, p);
+    // printk("[%s] unbound [0x%x -> 0x%x]\n", __FUNCTION__, v, p);
+    printk("------------------------------- free_page end ---------------------------------\n");
+    printk("===============================================================================\n");
 }
 
 // 分配一页内核内存（如果开启了虚拟内存，则返回虚拟地址，并自动挂载物理页）

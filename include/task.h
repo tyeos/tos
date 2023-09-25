@@ -102,7 +102,8 @@ typedef struct tss_t {
 } __attribute__((packed)) tss_t; // 目前占用字节数: 27*4=108
 
 /*
- * 以下结构即为PCB，Process Control Block, 即进程控制块，
+ * 进程或线程的PCB，Process Control Block, 程序控制块，
+ *
  * 操作系统为每个进程提供一个PCB，它就是进程的身份证，用它来记录与此进程相关的信息，比如进程状态、PID、优先级等,
  * PCB都属于内核空间，包括用户进程的PCB，所有PCB最后在调度器中用一张表（进程表）维护，所以PCB又称进程表项。
  * 一般PCB的基本结构(实际格式取决于操作系统的功能复杂度):
@@ -129,11 +130,12 @@ typedef struct task_t {
 
     /* 以上字段位置不要做调整，在汇编中会根据变量位置找值，下面的变量可做调整 */
 
-    task_state_t state;       // offset=sizeof(tss_t)+4*4, 进程状态，enum占4字节
-    chain_elem_t* chain_elem; // offset=sizeof(tss_t)+5*4, 在任务队列中元素指针
-    uint8 ticks;              // offset=sizeof(tss_t)+6*4, 占用CPU的时间滴答数（用中断次数表示，初始值为优先级）
-    uint8 priority;           // offset=sizeof(tss_t)+6*4+1, 任务优先级，值越大级别越高
-    char name[16];            // offset=sizeof(tss_t)+6*4+2, 线程名称
+    task_state_t state;       // 进程状态，enum占4字节
+    chain_elem_t chain_elem;  // 在任务队列中元素指针
+    uint8 ticks;              // 占用CPU的时间滴答数（用中断次数表示，初始值为优先级）
+    uint8 priority;           // 任务优先级，值越大级别越高
+    char name[16];            // 线程名称
+
 } __attribute__((packed)) task_t;
 
 void task_init();

@@ -15,11 +15,11 @@ void chain_init(chain_t *chain) {
     */
     chain->size = 0;
     // 修改head前后项
-    chain->head->prev = NULL;
-    chain->head->next = chain->tail;
+    chain->head.prev = NULL;
+    chain->head.next = &chain->tail;
     // 修改tail前后项
-    chain->tail->prev = chain->head;
-    chain->tail->next = NULL;
+    chain->tail.prev = &chain->head;
+    chain->tail.next = NULL;
 }
 
 // 在某个元素前插入元素
@@ -69,13 +69,13 @@ void chain_insert_after(chain_t *chain, chain_elem_t *target, chain_elem_t *elem
 
 // 往链表首部添加元素
 void chain_put_first(chain_t *chain, chain_elem_t *elem) {
-    chain_insert_before(chain, chain->head->next, elem);
+    chain_insert_before(chain, chain->head.next, elem);
 }
 
 
 // 往链表尾部添加元素
 void chain_put_last(chain_t *chain, chain_elem_t *elem) {
-    chain_insert_after(chain, chain->tail->prev, elem);
+    chain_insert_after(chain, chain->tail.prev, elem);
 }
 
 // 删除某个元素
@@ -87,7 +87,7 @@ chain_elem_t *chain_remove(chain_t *chain, chain_elem_t *elem) {
         |  ↓_____next____↑    |
         |_____________________|
     */
-    if (!chain_exist(chain, elem)) return NULL;
+    if (chain->size == 0 || elem == NULL || elem->prev == NULL || elem->next == NULL) return NULL;
     // 前驱项
     elem->prev->next = elem->next;
     // 后驱项
@@ -100,17 +100,17 @@ chain_elem_t *chain_remove(chain_t *chain, chain_elem_t *elem) {
 
 // 弹出链表首部元素
 chain_elem_t *chain_pop_first(chain_t *chain) {
-    return chain_remove(chain, chain->head->next);
+    return chain_remove(chain, chain->head.next);
 }
 
 // 弹出链表尾部元素
 chain_elem_t *chain_pop_last(chain_t *chain) {
-    return chain_remove(chain, chain->tail->prev);
+    return chain_remove(chain, chain->tail.prev);
 }
 
 // 链表中是否存在某个元素
 bool chain_exist(chain_t *chain, chain_elem_t *elem) {
-    for (chain_elem_t *i = chain->head->next; i != chain->tail; i = i->next) if (i == elem) return true;
+    for (chain_elem_t *i = chain->head.next; i != &chain->tail; i = i->next) if (i == elem) return true;
     return false;
 }
 
@@ -121,5 +121,5 @@ uint32 chain_len(chain_t *chain) {
 
 // 返回链表是否为空
 bool chain_empty(chain_t *chain) {
-    return chain->size == 0 || chain->head->next == chain->tail;
+    return chain->size == 0 || chain->head.next == &chain->tail;
 }
