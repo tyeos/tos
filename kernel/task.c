@@ -190,49 +190,68 @@ static task_t *create_user_process(char *name, uint8 priority, task_func_t func)
     return task;
 }
 
+/* 模拟内核任务A */
 static void *kernel_task_a(void *args) {
-    for (int i = 0; i < 20; ++i) {
-        printk("K_A ====== %d\n", i);
+    for (int i = 0; i < 10; ++i) {
+        printk("K_A ~ %d\n", i);
         HLT
     }
     return NULL;
 }
 
+/* 模拟内核任务B */
 static void *kernel_task_b(void *args) {
-    for (int i = 0; i < 20; ++i) {
-        printk("K_B ================================================ %d\n", i);
+    for (int i = 0; i < 10; ++i) {
+        printk("K_B ~~~ %d\n", i);
         HLT
     }
     return NULL;
 }
 
+/* 模拟用户进程A */
 static void *user_task_a(void *args) {
-    for (int i = 0; i < 300; ++i) {
+    uint32 p1 = syscall(SYS_ALLOC_PAGE);
+    syscall2(SYS_PRINT, "U_PA : p1 = 0x%x\n", p1);
+    syscall1(SYS_FREE_PAGE, p1);
+
+    uint32 *p2 = (uint32 *) syscall(SYS_ALLOC_PAGE);
+    *p2 = 100;
+    syscall3(SYS_PRINT, "U_PA : p2 [0x%x -> 0x%x]\n", p2, *p2);
+
+    for (int i = 0; i < 100; ++i) {
         int pid = syscall(SYS_GET_PID);
-        syscall3(SYS_PRINT, "U_PA ================= [%d] pid = %d\n", i, pid);
     }
+
+    syscall1(SYS_PRINT, "U_PA : ready exit ~\n");
     syscall(SYS_EXIT);
     return NULL;
 }
 
+/* 模拟用户进程B */
 static void *user_task_b(void *args) {
-    for (int i = 0; i < 300; ++i) {
-        int pid = syscall(SYS_GET_PID);
-        syscall3(SYS_PRINT, "U_PB ==================================================== [%d] pid = %d\n", i, pid);
-    }
+    uint32 p1 = syscall(SYS_ALLOC_PAGE);
+    syscall2(SYS_PRINT, "U_PB ::: p1 = 0x%x\n", p1);
+
+    uint32 p2 = syscall(SYS_ALLOC_PAGE);
+    syscall2(SYS_PRINT, "U_PB ::: p2 = 0x%x\n", p2);
+
+    syscall1(SYS_PRINT, "U_PB ::: ready exit ~\n");
     syscall(SYS_EXIT);
     return NULL;
 }
 
 static void *idle(void *args) {
-
-    create_kernel_thread("K_A", 1, kernel_task_a);
+    create_kernel_thread("K_A", 2, kernel_task_a);
     create_kernel_thread("K_B", 1, kernel_task_b);
     create_user_process("U_PA", 1, user_task_a);
     create_user_process("U_PB", 1, user_task_b);
 
-    for (int i = 0;; ++i) {
-        printk("idle ================================ %d\n", i);
+    bool all_task_end = false;
+    for (int i = 0; ; ++i) {
+        if (!all_task_end && tasks.size == 1) {
+            all_task_end = true;
+            printk("idle :::::: all task have exited, except for idle ~ %d\n", i);
+        }
         HLT
         HLT
     }

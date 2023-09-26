@@ -23,6 +23,7 @@ extern exit_current_task    ; 在c中定义，退出普通任务，换到idle任
 extern process_activate     ; 在c中定义，激活用户页表，如果是用户进程还会更新tss的栈
 extern alloc_user_page      ; 在c中定义，分配用户页
 extern free_user_page       ; 在c中定义，释放用户页
+extern process_destroy      ; 在c中定义，释放用户进程页表
 
 ; ---------------------------------------------------------------------------------------
 ; 时钟中断处理函数
@@ -483,6 +484,11 @@ exit_user_model:
     and eax, 0xFFFFF000     ; 分配的一页4k内存，低12位清零即为虚拟页地址
     push eax                ; 这里使用的是用户进程的内核栈，等会就全释放了，所以不用考虑恢复栈的问题
     call free_user_page
+
+    ; 再释放用户页表
+    mov eax, [current_task]
+    push eax
+    call process_destroy
 
     ; 再终止任务并更新current_task（变为idle任务）
     call exit_current_task

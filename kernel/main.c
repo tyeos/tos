@@ -22,7 +22,9 @@ void kernel_main(void) {
     STI
 
     while (true) {
-        printk("main block! ");
+        printk("main block! \n");
+        HLT
+        HLT
         HLT
     }
 }

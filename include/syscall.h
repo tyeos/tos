@@ -14,12 +14,14 @@
  * 系统调用子功能号
  */
 enum SYSCALL_NUMBER {
-    SYS_PRINT,    // 0
-    SYS_GET_PID,  // 1
-    SYS_EXIT      // 2
+    SYS_PRINT,      // 0, 控制台打印
+    SYS_GET_PID,    // 1, 获取进程号
+    SYS_EXIT,       // 2, 退出当前进程
+    SYS_ALLOC_PAGE, // 3, 分配物理页
+    SYS_FREE_PAGE   // 4, 释放物理页
 };
 
-void syscall_init(void);
+void syscall_init();
 
 /*
  * 无参数的系统调用
