@@ -511,7 +511,7 @@ void *create_virtual_page_dir() {
     /*
      * 初始化置零（第0x~0x2FF项）
      */
-    memset((void *) ((uint32) page_dir_vaddr ), 0, 0x400 * 3);
+    memset((void *) ((uint32) page_dir_vaddr), 0, 0x400 * 3);
     /*
      * 复制内核页表（第0x300~0x3FF项）
      */
@@ -531,32 +531,24 @@ void *create_virtual_page_dir() {
 }
 
 /*
- * 切换任务，激活页表
+ * 任务切换时调用：
+ * 激活线程或进程的页表，如果是用户进程还要更新其0特权级栈，即tss中的esp0
  */
-static void page_dir_activate(task_t *task) {
+void process_activate(task_t *task) {
+    /* 切换任务，激活页表 */
     uint32 pgdir_phy_addr = PAGE_DIR_PHYSICAL_ADDR; // 默认用内核页表
     if (task->pgdir) { // 用户态进程有自己的页目录表
         pgdir_phy_addr = (uint32) v2p_addr(task->pgdir);
-        // 页表换了，虚拟地址池也要切换
-        g_user_memory = &task->user_vaddr_alloc;
+        g_user_memory = &task->user_vaddr_alloc; // 换到用户页目录表了，虚拟地址池也要切换
+    } else {
+        g_user_memory = NULL; // 切到内核任务后，就不需要用户页表了
     }
 
+    // 先更新cr3
     set_cr3(pgdir_phy_addr);
-}
 
-/*
- * 任务切换时调用：
- * 激活线程或进程的页表，更新tss中的esp为进程特权级0的栈
- */
-void process_activate(task_t *task) {
-    page_dir_activate(task);
-    /*
-     * 内核线程特权级本身就是0，CPU进入中断时并不会从tss中获取0特权级栈地址，
-     * 所以内核线程不需要更新esp0
-     */
-    if (task->pgdir) {
-        update_tss_esp(task->kstack);
-    }
+    /* 只更新用户进程esp0即可，内核线程特权级本身就是0，CPU进入中断时并不会从tss中获取0特权级栈地址 */
+    if (task->pgdir) update_tss_esp(task->kstack);
 }
 
 /*
@@ -573,7 +565,7 @@ static void *_alloc_virtual_page(enum pool_flags pf) {
         return NULL;
     }
     if (mp->pages_used >= mp->pages_total) {
-        printk("[%s] memory used up!\n", __FUNCTION__);
+        printk("[%s] memory used up [0x%x / 0x%x]!\n", __FUNCTION__, mp->pages_used, mp->pages_total);
         return NULL;
     }
 
@@ -679,11 +671,12 @@ static void *free_virtual_page(enum pool_flags pf, void *virtual_page) {
     // 检查如果页表项完都释放了，则对应页表也释放
     uint32 pde_index = (uint32) virtual_page >> 22;
 
-    uint16 *pde_counter = g_user_memory->pde_counter;
-    uint32 pde_counter_index = pde_index;
-    if (pf == PF_KERNEL) {
-        pde_counter = g_kernel_memory.pde_counter;
-        pde_counter_index -= 0x300;
+    // 默认使用内核内存池，因为用户内存池可能未初始化
+    uint16 *pde_counter = g_kernel_memory.pde_counter;
+    uint32 pde_counter_index = pde_index - 0x300;
+    if (pf != PF_KERNEL) {
+        pde_counter = g_user_memory->pde_counter;
+        pde_counter_index = pde_index;
     }
 
     pde_counter[pde_counter_index]--; // 挂载数-1

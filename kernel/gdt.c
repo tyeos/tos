@@ -12,22 +12,20 @@
 
 #define GDT_SIZE 256
 
-#define GDT_REAL_MODE_USED_SIZE 5 // 数量，
-
 /*
  * 在实模式下创建的描述符
  * 参见 loader.asm 中的定义
  */
-#define GDT_CODE_INDEX 1   // 代码段索引值
-#define GDT_DATA_INDEX 2   // 数据段索引值
-#define GDT_STACK_INDEX 3  // 栈段索引值
+#define R0_CODE_GDT_ENTRY_INDEX 1   // 代码段索引值
+#define R0_DATA_GDT_ENTRY_INDEX 2   // 数据段索引值
+#define R0_STACK_GDT_ENTRY_INDEX 3  // 栈段索引值
 #define GDT_SCREEN_INDEX 4 // 屏幕段索引值
 
 /*
  * 在此新建的描述符
  */
 #define R3_CODE_GDT_ENTRY_INDEX 5 // R3代码段在GDT中的索引值
-#define R3_DATA_GDT_ENTRY_INDEX 6 // R3数据段在GDT中的索引值
+#define R3_DATA_GDT_ENTRY_INDEX 6 // R3数据段在GDT中的索引值, R3的栈段就不单独创建了，和数据段共用一个即可
 #define TSS_GDT_ENTRY_INDEX 7     // TSS段在GDT中的索引值
 
 uint64 gdt[GDT_SIZE] = {0};
@@ -77,9 +75,9 @@ dt_ptr gdt_ptr;
 static tss_t tss;
 
 // 创建（内核态）r0用的选择子：代码段、数据段，栈段
-int r0_code_selector = GDT_CODE_INDEX << 3;
-int r0_data_selector = GDT_DATA_INDEX << 3;
-int r0_stack_selector = GDT_STACK_INDEX << 3;
+int r0_code_selector = R0_CODE_GDT_ENTRY_INDEX << 3;
+int r0_data_selector = R0_DATA_GDT_ENTRY_INDEX << 3;
+int r0_stack_selector = R0_STACK_GDT_ENTRY_INDEX << 3;
 
 // 创建（用户态）r3用的选择子：代码段、数据段
 int r3_code_selector = R3_CODE_GDT_ENTRY_INDEX << 3 | 0b011; // TI=GDT, RPL=3

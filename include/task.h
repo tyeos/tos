@@ -150,19 +150,16 @@ typedef struct task_t {
     task_func_t func;         // offset=sizeof(tss_t)+1*4, 要执行的任务, 函数指针, 32位模式下占4字节
     uint32 elapsed_ticks;     // offset=sizeof(tss_t)+2*4, 总调度次数（从开始运行的总滴答数）
     uint32 kstack;            // offset=sizeof(tss_t)+3*4, 每个内核任务都有自己的内核栈
+    uint32 *pgdir;            // offset=sizeof(tss_t)+4*4 进程页目录表的虚拟地址（该属性给用户进程使用，可用其判断是否是用户任务）
 
     /* 以上字段位置不要做调整，在汇编中会根据变量位置找值，下面的变量可做调整 */
 
-    task_state_t state;       // 进程状态，enum占4字节
-    chain_elem_t chain_elem;  // 在任务队列中元素指针
-    uint8 ticks;              // 占用CPU的时间滴答数（用中断次数表示，初始值为优先级）
-    uint8 priority;           // 任务优先级，值越大级别越高
-    char name[16];            // 线程名称
-
-    /* 以下两个属性给用户进程用 */
-
-    uint32 *pgdir;                   // 进程页目录表的虚拟地址
-    memory_alloc_t user_vaddr_alloc; // 用户进程的虚拟地址池
+    task_state_t state;              // 进程状态，enum占4字节
+    chain_elem_t chain_elem;         // 在任务队列中元素指针
+    uint8 ticks;                     // 占用CPU的时间滴答数（用中断次数表示，初始值为优先级）
+    uint8 priority;                  // 任务优先级，值越大级别越高
+    char name[16];                   // 线程名称
+    memory_alloc_t user_vaddr_alloc; // 用户进程的虚拟地址池（该属性给用户进程使用）
 
 } __attribute__((packed)) task_t;
 

@@ -8,6 +8,7 @@
 #include "../include/chain.h"
 #include "../include/bitmap.h"
 #include "../include/string.h"
+#include "../include/syscall.h"
 
 
 /*
@@ -19,6 +20,10 @@
  *           内核线程B    // task: K_B
  *      用户进程(单线程)A  // task: U_PA
  *      用户进程(单线程)B  // task: U_PB
+ * --------------------------------------------------------------------------------------------------------------------
+ * 顺序：
+ *      main创建idle任务，之后便退出历史舞台，
+ *      然后在idle程序中，启动其他内核任务及用户任务
  * --------------------------------------------------------------------------------------------------------------------
  * 说明：
  *      进程都有独立的页目录表（及页表）
@@ -187,7 +192,7 @@ static task_t *create_user_process(char *name, uint8 priority, task_func_t func)
 
 static void *kernel_task_a(void *args) {
     for (int i = 0; i < 20; ++i) {
-        printk("K_A ======= %d\n", i);
+        printk("K_A ====== %d\n", i);
         HLT
     }
     return NULL;
@@ -195,20 +200,36 @@ static void *kernel_task_a(void *args) {
 
 static void *kernel_task_b(void *args) {
     for (int i = 0; i < 20; ++i) {
-        printk("K_B ==================================================== %d\n", i);
+        printk("K_B ================================================ %d\n", i);
         HLT
     }
     return NULL;
 }
 
-// 测试切换到用户态, 在汇编中实现
-extern void *move_to_user_mode(void *args);
+static void *user_task_a(void *args) {
+    for (int i = 0; i < 300; ++i) {
+        int pid = syscall(SYS_GET_PID);
+        syscall3(SYS_PRINT, "U_PA ================= [%d] pid = %d\n", i, pid);
+    }
+    syscall(SYS_EXIT);
+    return NULL;
+}
+
+static void *user_task_b(void *args) {
+    for (int i = 0; i < 300; ++i) {
+        int pid = syscall(SYS_GET_PID);
+        syscall3(SYS_PRINT, "U_PB ==================================================== [%d] pid = %d\n", i, pid);
+    }
+    syscall(SYS_EXIT);
+    return NULL;
+}
 
 static void *idle(void *args) {
-    create_kernel_thread("K_A", 2, kernel_task_a);
-    create_kernel_thread("K_B", 2, kernel_task_b);
-    create_user_process("U_PA", 1, move_to_user_mode);
-//    create_task("U_PB", 1, move_to_user_mode);
+
+    create_kernel_thread("K_A", 1, kernel_task_a);
+    create_kernel_thread("K_B", 1, kernel_task_b);
+    create_user_process("U_PA", 1, user_task_a);
+    create_user_process("U_PB", 1, user_task_b);
 
     for (int i = 0;; ++i) {
         printk("idle ================================ %d\n", i);
