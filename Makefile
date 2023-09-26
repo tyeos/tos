@@ -78,7 +78,7 @@ build: mkdir $(BUILD_BOOT_O_FILES) kernel
 
 all: build
 	$(shell rm -f $(BUILD_HD_IMG))
-	# 创建硬盘镜像文件，-hd指定镜像大小，单位M
+	# 创建硬盘镜像文件，-hd指定镜像大小，单位MB，关于该指令可参考 READ_bximage.md
 	bximage -q -hd=16 -func=create -sectsize=512 -imgmode=flat $(BUILD_HD_IMG)
 	# MBR装在0盘0道1扇区
 	dd if=$(word 1, $(BUILD_BOOT_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=0 count=1 conv=notrunc
