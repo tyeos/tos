@@ -31,7 +31,12 @@ BUILD_KERNEL_ELF := $(BUILD)/kernel.elf
 BUILD_KERNEL_BIN := $(BUILD)/kernel.bin
 BUILD_KERNEL_MAP := $(BUILD)/kernel.map
 
+# MBR最多支持挂四块盘
 BUILD_HD_IMG := $(BUILD)/hd.img
+BUILD_HD1_IMG := $(BUILD)/hd1.img
+BUILD_HD2_IMG := $(BUILD)/hd2.img
+BUILD_HD3_IMG := $(BUILD)/hd3.img
+HD_IMG_SIZES := 16 80 32 32
 
 # 由于是自己写的内核，所以很多C标准库的东西不可用，比如标准库的打印函数，或是不需要的，这里把相关内容都屏蔽掉
 CFLAGS := -m32 					# 32位程序
@@ -51,6 +56,25 @@ mkdir:
 	$(shell mkdir -p $(BUILD)/$(BOOT))
 	$(shell mkdir -p $(BUILD)/$(BRIDGE))
 	$(foreach v, $(KERNEL_DIRS), $(shell mkdir -p $(BUILD)/$(v)))
+
+hd0:
+	$(shell rm -f $(BUILD_HD_IMG))
+	# 创建硬盘镜像文件，-hd指定镜像大小，单位MB，关于该指令可参考 READ_bximage.md
+	bximage -q -hd=$(word 1, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD_IMG)
+
+hd1:
+	$(shell rm -f $(BUILD_HD1_IMG))
+	bximage -q -hd=$(word 2, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD1_IMG)
+
+hd2:
+	$(shell rm -f $(BUILD_HD2_IMG))
+	bximage -q -hd=$(word 3, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD2_IMG)
+
+hd3:
+	$(shell rm -f $(BUILD_HD3_IMG))
+	bximage -q -hd=$(word 4, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD3_IMG)
+
+hd_ex: hd1 hd2 hd3
 
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@
@@ -76,10 +100,7 @@ kernel: $(BUILD_BRIDGE_O_FILES) $(BUILD_KERNEL_O_FILES)
 
 build: mkdir $(BUILD_BOOT_O_FILES) kernel
 
-all: build
-	$(shell rm -f $(BUILD_HD_IMG))
-	# 创建硬盘镜像文件，-hd指定镜像大小，单位MB，关于该指令可参考 READ_bximage.md
-	bximage -q -hd=16 -func=create -sectsize=512 -imgmode=flat $(BUILD_HD_IMG)
+all: hd0 build
 	# MBR装在0盘0道1扇区
 	dd if=$(word 1, $(BUILD_BOOT_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=0 count=1 conv=notrunc
 	# 给loader分配4个扇区
@@ -94,13 +115,23 @@ bochs: all
 qemu: all
 	# -m megs: Sets guest startup RAM size to megs megabytes
 	# -boot c: first hard disk
-	qemu-system-i386 -m 32M -boot c -drive file=$(BUILD_HD_IMG),format=raw,index=0,media=disk
+	# -drive option[,option[,option[,...]]]
+	#     Define a new drive. Valid options are: file=... index=... media=... format=... ...
+	qemu-system-i386 -m 32M -boot c \
+		-drive file=$(BUILD_HD_IMG),format=raw,index=0,media=disk \
+		-drive file=$(BUILD_HD1_IMG),format=raw,index=1,media=disk \
+		-drive file=$(BUILD_HD2_IMG),format=raw,index=2,media=disk \
+		-drive file=$(BUILD_HD3_IMG),format=raw,index=3,media=disk
 
 qemu_gdb: all
 	# -S: Do not start CPU at startup (you must type 'c' in the monitor).
 	# -s: Shorthand for -gdb tcp::1234, i.e. open a gdbserver on TCP port 1234.
 	# 注：在CLion中添加RemoteDebug时，'target remote' args 填写 127.0.0.1:1234
-	qemu-system-i386 -m 32M -boot c -S -s -drive file=$(BUILD_HD_IMG),format=raw,index=0,media=disk
+	qemu-system-i386 -m 32M -boot c -S -s \
+		-drive file=$(BUILD_HD_IMG),format=raw,index=0,media=disk \
+		-drive file=$(BUILD_HD1_IMG),format=raw,index=1,media=disk \
+		-drive file=$(BUILD_HD2_IMG),format=raw,index=2,media=disk \
+		-drive file=$(BUILD_HD3_IMG),format=raw,index=3,media=disk
 
 clean:
 	$(shell rm -rf $(BUILD))

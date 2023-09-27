@@ -18,8 +18,12 @@ void kernel_main(void) {
     idt_init();
     clock_init();
     syscall_init();
-    task_init();
+//    task_init();
     STI
+
+    uint8 hd_cnt = *((uint8 *) (0x475));    // 获取硬盘的数量
+    printk("hd_cnt = %d! \n",hd_cnt);
+    BOCHS_DEBUG_MAGIC
 
     while (true) {
         printk("main block! \n");
