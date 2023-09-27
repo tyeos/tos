@@ -76,7 +76,7 @@ MBR 512 bytes 结构 (注：EBR也是此结构):
     |                          |
     |                          |
     |      Boot program        |
-    |         and              |
+    |         and              |    0x0 ~ 0x1BD
     |  hard disk parameters    |
     |       (446 bytes)        |
     |                          |
@@ -86,12 +86,12 @@ MBR 512 bytes 结构 (注：EBR也是此结构):
     ----------------------------
     |                          |
     |                          |
-    |    partition table       |
+    |    partition table       |    0x1BE ~ 0x1FD
     |       (64 bytes)         |
     |                          |
     |                          |
     ----------------------------
-    |     0x55 and 0xAA        |
+    |     0x55 and 0xAA        |    0x1FE ~ 0x1FF
     |       (2 bytes)          |
     ---------------------------- height address
 
