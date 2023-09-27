@@ -36,7 +36,7 @@ BUILD_HD_IMG := $(BUILD)/hd.img
 BUILD_HD1_IMG := $(BUILD)/hd1.img
 BUILD_HD2_IMG := $(BUILD)/hd2.img
 BUILD_HD3_IMG := $(BUILD)/hd3.img
-HD_IMG_SIZES := 16 80 32 32
+HD_IMG_SIZES := 16 80 10 32
 
 # 由于是自己写的内核，所以很多C标准库的东西不可用，比如标准库的打印函数，或是不需要的，这里把相关内容都屏蔽掉
 CFLAGS := -m32 					# 32位程序
