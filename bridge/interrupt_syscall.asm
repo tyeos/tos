@@ -2,6 +2,10 @@
 GDT_DATA_INDEX equ 2
 R0_DATA_SELECTOR equ GDT_DATA_INDEX << 3
 
+R3_DATA_GDT_ENTRY_INDEX equ 6
+R3_DATA_SELECTOR equ R3_DATA_GDT_ENTRY_INDEX << 3 | 0b011
+
+
 [SECTION .text]
 [bits 32]
 
@@ -47,6 +51,17 @@ interrupt_handler_system_call:
     push ebx ; 第1个参数
     call [syscall_table + eax * 4] ; 通过调用号找到处理函数调用
     add esp, 4 * 3 ; 平栈
+
+    ; ---------------------------------------------------------------------------------------
+    ; 给用户态设置段寄存器
+    ; ---------------------------------------------------------------------------------------
+    push eax
+    mov eax, R3_DATA_SELECTOR
+    mov ds, eax
+    mov es, eax
+    mov fs, eax
+    mov gs, eax
+    pop eax
 
     iret
 
