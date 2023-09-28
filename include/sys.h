@@ -5,6 +5,8 @@
 #ifndef TOS_SYS_H
 #define TOS_SYS_H
 
+#include "clock.h"
+
 #define BOCHS_DEBUG_MAGIC __asm__("xchg bx, bx");
 
 #define CLI __asm__("cli"); // 设置IF=0，即关中断 (不再响应任何可屏蔽中断)
@@ -19,6 +21,9 @@
 #define HLT __asm__("hlt");
 
 #define STOP __asm__("cli; hlt;"); // 关中断并释放CPU，即让程序停止执行
-#define SLEEP(times) for (int i = 0; i < times; ++i) HLT ; // 暂停指定次数个时钟周期
+
+#define SLEEP_ITS(times) for (uint32 _i = 0; _i < times; ++_i) HLT  // sleep interrupt times, 暂停指定次数个时钟中断
+#define SLEEP_MS(millisecond) SLEEP_ITS(MS2TIMES(millisecond))      // 暂停指定毫秒数
+#define SLEEP(second) SLEEP_ITS(S2TIMES(second))               // 暂停指定秒数
 
 #endif //TOS_SYS_H

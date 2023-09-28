@@ -15,7 +15,7 @@ typedef enum task_state_t {
 //    TASK_INIT,      // 初始化
     TASK_RUNNING,   // 执行，正在运行态，当前运行的线程必然是此状态
     TASK_READY,     // 就绪，可运行态，只有处于此状态的任务才有机会上处理器运行
-//    TASK_BLOCKED,   // 阻塞，不可运行态，锁竞争时若未取到信号量，等待期间就将其置为阻塞状态，直到其他任务释放的信号量分给该任务后恢复到就绪态
+    TASK_BLOCKED,   // 阻塞，不可运行态，锁竞争时若未取到信号量，等待期间就将其置为阻塞状态，直到其他任务释放的信号量分给该任务后恢复到就绪态
 //    TASK_WAITING,   // 等待，不可运行态，
 //    TASK_HANGING,   // 挂起，不可运行态，等CPU通知，CPU从当前任务出去执行新任务，当前任务暂时挂起，新任务执行完成回到此任务才能继续执行
 //    TASK_SLEEPING,  // 睡眠，不可运行态，到指定时间再来找CPU
@@ -156,6 +156,7 @@ typedef struct task_t {
 
     task_state_t state;              // 进程状态，enum占4字节
     chain_elem_t chain_elem;         // 在任务队列中元素指针
+    chain_elem_t chain_lock;         // 在锁队列中元素指针（由于chain是无value设计，所以在不同的队列中要使用不同的elem）
     uint8 ticks;                     // 占用CPU的时间滴答数（用中断次数表示，初始值为优先级）
     uint8 priority;                  // 任务优先级，值越大级别越高
     char name[16];                   // 线程名称

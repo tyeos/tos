@@ -63,6 +63,6 @@ void kernel_main(void) {
 
     while (true) {
         printk("main block! \n");
-        SLEEP(100)
+        SLEEP(5)
     }
 }

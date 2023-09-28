@@ -5,6 +5,7 @@
 #ifndef TOS_EFLAGS_H
 #define TOS_EFLAGS_H
 
+#include "../sys.h"
 #include "../types.h"
 
 uint32 get_eflags();
@@ -19,6 +20,6 @@ uint8 get_if_flag();
     ack_int;\
 })
 
-#define check_recover_if(before_ack_int) ({if (before_ack_int) STI})
+#define check_recover_if(before_ack_int) if (before_ack_int) STI
 
 #endif //TOS_EFLAGS_H

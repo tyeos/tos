@@ -9,6 +9,7 @@
 #include "../include/bitmap.h"
 #include "../include/string.h"
 #include "../include/syscall.h"
+#include "../include/lock.h"
 
 
 /*
@@ -82,18 +83,18 @@ void task_scheduler_ticks() {
             // printk("clock_task_scheduler ticks\n");
             return;
         }
-        // 保存当前任务状态，置为就绪状态
-        current_task->state = TASK_READY;
+        // 保存当前任务状态，置为就绪状态（当前任务必须处于运行态）
+        if (current_task->state == TASK_RUNNING) current_task->state = TASK_READY;
         current_task->ticks = current_task->priority;
+        current_task = NULL;
     }
 
     // 换下一个任务
     for (int i = 0; i < tasks.size; ++i) {
-
         // 元素指针地址 减去 元素在结构体内的偏移量, 也可直接 &0xFFFFF000 获取PCB地址，因为task地址都是按页分配的
-        task_t *task = (task_t *) ((char*) chain_pop_first(&tasks) - (uint32) (&((task_t *) NULL)->chain_elem));
-        chain_put_last(&tasks, &task->chain_elem); // 取出后添加到最后
-        if (task->state != TASK_READY) continue;
+        task_t *task = (task_t *) ((char *) chain_pop_first(&tasks) - (uint32) (&((task_t *) NULL)->chain_elem));
+        if (task->state != TASK_DIED) chain_put_last(&tasks, &task->chain_elem); // 正常任务取出后添加到最后
+        if (task->state != TASK_READY) continue; // 只查找处于就绪态的任务
 
         task->ticks--;
         task->elapsed_ticks++;
@@ -190,20 +191,34 @@ static task_t *create_user_process(char *name, uint8 priority, task_func_t func)
     return task;
 }
 
+uint32 test_lock_value = 0;
+lock_t test_lock;
+
+static void testLockAddValue(uint a) {
+    lock(&test_lock);
+    uint b = test_lock_value;
+    b += a;
+    if (b % 10 == 0) HLT
+    test_lock_value = b;
+    unlock(&test_lock);
+}
+
 /* 模拟内核任务A */
 static void *kernel_task_a(void *args) {
-    for (int i = 0; i < 10; ++i) {
-        printk("K_A ~ %d\n", i);
-        HLT
+    for (int i = 0; i < 100; ++i) {
+//        printk("K_A ~ %d\n", i);
+//        HLT
+        testLockAddValue(1);
     }
     return NULL;
 }
 
 /* 模拟内核任务B */
 static void *kernel_task_b(void *args) {
-    for (int i = 0; i < 10; ++i) {
-        printk("K_B ~~~ %d\n", i);
-        HLT
+    for (int i = 0; i < 100; ++i) {
+//        printk("K_B ~~~ %d\n", i);
+//        HLT
+        testLockAddValue(2);
     }
     return NULL;
 }
@@ -243,17 +258,17 @@ static void *user_task_b(void *args) {
 static void *idle(void *args) {
     create_kernel_thread("K_A", 2, kernel_task_a);
     create_kernel_thread("K_B", 1, kernel_task_b);
-    create_user_process("U_PA", 1, user_task_a);
-    create_user_process("U_PB", 1, user_task_b);
+//    create_user_process("U_PA", 1, user_task_a);
+//    create_user_process("U_PB", 1, user_task_b);
 
     bool all_task_end = false;
-    for (int i = 0; ; ++i) {
+    for (int i = 0;; ++i) {
         if (!all_task_end && tasks.size == 1) {
             all_task_end = true;
-            printk("idle :::::: all task have exited, except for idle ~ %d\n", i);
+            printk("idle :::::: all task have exited, except for idle ~ %d\n", test_lock_value);
+            break;
         }
-        HLT
-        HLT
+        SLEEP_ITS(2)
     }
     return NULL;
 }
@@ -264,6 +279,7 @@ void task_init() {
     bitmap_init(&pids);
     chain_init(&tasks);
 
+    lock_init(&test_lock);
     idle_task = create_kernel_thread("idle", 1, idle); // 第一个创建的任务，pid一定为0
 }
 
