@@ -11,7 +11,7 @@
 typedef struct chain_elem_t {
     struct chain_elem_t *prev; // previous 前驱节点
     struct chain_elem_t *next; // 后继节点
-} chain_elem_t;
+} __attribute__((packed)) chain_elem_t;
 
 /*
  链表结构:

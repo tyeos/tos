@@ -187,9 +187,9 @@ static memory_alloc_t g_kernel_memory;
 static uint16 kernel_pde_counter[0x100] = {0}; // 记录每个页目录表项已经分配的页表数
 
 /*
- * 用户虚拟内存池，随着用户进程的切换，对应也会发生变更
+ * 当前任务，从中获取用户虚拟内存池，随着用户进程的切换，对应也会发生变更
  */
-static memory_alloc_t *g_user_memory;
+extern task_t * current_task;
 
 
 /*
@@ -534,9 +534,6 @@ void process_activate(task_t *task) {
     uint32 pgdir_phy_addr = PAGE_DIR_PHYSICAL_ADDR; // 默认用内核页表
     if (task->pgdir) { // 用户态进程有自己的页目录表
         pgdir_phy_addr = (uint32) v2p_addr(task->pgdir);
-        g_user_memory = &task->user_vaddr_alloc; // 换到用户页目录表了，虚拟地址池也要切换
-    } else {
-        g_user_memory = NULL; // 切到内核任务后，就不需要用户页表了
     }
 
     // 先更新cr3
@@ -551,19 +548,19 @@ void process_activate(task_t *task) {
  * 注：该地址必须挂物理页才可使用
  */
 static void *_alloc_virtual_page(enum pool_flags pf) {
-    memory_alloc_t *mp = g_user_memory;
-    if (pf == PF_KERNEL) {
-        mp = &g_kernel_memory;
+    memory_alloc_t *mp = &g_kernel_memory;
+    if (pf != PF_KERNEL) {
+        mp = &current_task->user_vaddr_alloc;
     }
 
-    int32 idx = bitmap_alloc(&mp->bitmap);
+    int idx = bitmap_alloc(&mp->bitmap);
     if (idx == ERR_IDX) {
         printk("[%s] memory error!\n", __FUNCTION__);
         STOP
         return NULL;
     }
 
-    void *p = (void *) (mp->addr_start + (idx << 12));
+    void *p = (void *) (mp->addr_start + ((uint32)idx << 12));
     printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, mp->bitmap.total);
     return p;
 }
@@ -573,9 +570,9 @@ static void *_alloc_virtual_page(enum pool_flags pf) {
  * 注：需要提前释挂载的物理页
  */
 static void _free_virtual_page(enum pool_flags pf, void *p) {
-    memory_alloc_t *mp = g_user_memory;
-    if (pf == PF_KERNEL) {
-        mp = &g_kernel_memory;
+    memory_alloc_t *mp = &g_kernel_memory;
+    if (pf != PF_KERNEL) {
+        mp = &current_task->user_vaddr_alloc;
     }
 
     if ((uint) p < mp->addr_start || (uint) p > mp->addr_end) {
@@ -622,9 +619,9 @@ static void *alloc_virtual_page(enum pool_flags pf, void *binding_physical_page)
                kernel_pde_counter[pde_index - 0x300]);
     } else {
         *pte_vaddr = (uint32) binding_physical_page | 0b111; // 页属性，US=User, RW=1, P=1
-        g_user_memory->pde_counter[pde_index]++;
+        current_task->user_vaddr_alloc.pde_counter[pde_index]++;
         printk("[%s] bound [0x%x -> 0x%x], pte total %d\n", __FUNCTION__, virtual_page, binding_physical_page,
-               g_user_memory->pde_counter[pde_index]);
+               current_task->user_vaddr_alloc.pde_counter[pde_index]);
     }
 
     return virtual_page;
@@ -650,7 +647,7 @@ static void *free_virtual_page(enum pool_flags pf, void *virtual_page) {
     uint16 *pde_counter = g_kernel_memory.pde_counter;
     uint32 pde_counter_index = pde_index - 0x300;
     if (pf != PF_KERNEL) {
-        pde_counter = g_user_memory->pde_counter;
+        pde_counter = current_task->user_vaddr_alloc.pde_counter;
         pde_counter_index = pde_index;
     }
 
@@ -686,7 +683,7 @@ void process_destroy(task_t *task) {
     // 检查所有页表（第0个页表除外）
     void *physical_page;
     for (uint32 i = 1; i < 0x300; ++i) {
-        if (!g_user_memory->pde_counter[i]) continue;
+        if (!current_task->user_vaddr_alloc.pde_counter[i]) continue;
         // 有正在使用的物理页, 逐个页表项进行检查
         for (uint32 j = 0; j < 0x400; ++j) {
             // 获取访问页表项的指针, 将每个页表项挂载的物理页释放
@@ -694,7 +691,7 @@ void process_destroy(task_t *task) {
             if (!physical_page) continue; // 该页表项未挂物理页
             free_physical_page(physical_page);
             printk("--------------------\n");
-            if (!g_user_memory->pde_counter[i]) break; // 该页表所关联的物理页已全部释放
+            if (!current_task->user_vaddr_alloc.pde_counter[i]) break; // 该页表所关联的物理页已全部释放
         }
     }
     printk("--------------- free all user(%d) page end -----------------\n", task->pid);

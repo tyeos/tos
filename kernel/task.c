@@ -191,34 +191,20 @@ static task_t *create_user_process(char *name, uint8 priority, task_func_t func)
     return task;
 }
 
-uint32 test_lock_value = 0;
-lock_t test_lock;
-
-static void testLockAddValue(uint a) {
-    lock(&test_lock);
-    uint b = test_lock_value;
-    b += a;
-    if (b % 10 == 0) HLT
-    test_lock_value = b;
-    unlock(&test_lock);
-}
-
 /* 模拟内核任务A */
 static void *kernel_task_a(void *args) {
-    for (int i = 0; i < 100; ++i) {
-//        printk("K_A ~ %d\n", i);
-//        HLT
-        testLockAddValue(1);
+    for (int i = 0; i < 10; ++i) {
+        printk("K_A ~ %d\n", i);
+        HLT
     }
     return NULL;
 }
 
 /* 模拟内核任务B */
 static void *kernel_task_b(void *args) {
-    for (int i = 0; i < 100; ++i) {
-//        printk("K_B ~~~ %d\n", i);
-//        HLT
-        testLockAddValue(2);
+    for (int i = 0; i < 10; ++i) {
+        printk("K_B ~~~ %d\n", i);
+        HLT
     }
     return NULL;
 }
@@ -258,15 +244,14 @@ static void *user_task_b(void *args) {
 static void *idle(void *args) {
     create_kernel_thread("K_A", 2, kernel_task_a);
     create_kernel_thread("K_B", 1, kernel_task_b);
-//    create_user_process("U_PA", 1, user_task_a);
-//    create_user_process("U_PB", 1, user_task_b);
+    create_user_process("U_PA", 1, user_task_a);
+    create_user_process("U_PB", 1, user_task_b);
 
     bool all_task_end = false;
     for (int i = 0;; ++i) {
         if (!all_task_end && tasks.size == 1) {
             all_task_end = true;
-            printk("idle :::::: all task have exited, except for idle ~ %d\n", test_lock_value);
-            break;
+            printk("idle :::::: all task have exited, except for idle ~ %d\n", i);
         }
         SLEEP_ITS(2)
     }
@@ -279,7 +264,6 @@ void task_init() {
     bitmap_init(&pids);
     chain_init(&tasks);
 
-    lock_init(&test_lock);
     idle_task = create_kernel_thread("idle", 1, idle); // 第一个创建的任务，pid一定为0
 }
 

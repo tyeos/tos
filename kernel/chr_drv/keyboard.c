@@ -9,7 +9,7 @@
     断码 = 通码 | 8
  */
 #include "../../include/print.h"
-#include "../../include/bridge/io.h"
+#include "../../include/io.h"
 #include "../../include/types.h"
 #include "../../include/console.h"
 

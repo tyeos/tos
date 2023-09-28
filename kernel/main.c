@@ -9,7 +9,7 @@
 #include "../include/mm.h"
 #include "../include/task.h"
 #include "../include/syscall.h"
-#include "../include/bridge/io.h"
+#include "../include/io.h"
 
 
 #define port_read(port, buf, nr) \

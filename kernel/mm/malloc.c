@@ -6,7 +6,7 @@
 #include "../../include/mm.h"
 #include "../../include/sys.h"
 #include "../../include/print.h"
-#include "../../include/bridge/eflags.h"
+#include "../../include/eflags.h"
 
 
 /*

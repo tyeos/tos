@@ -5,8 +5,8 @@
 #ifndef TOS_EFLAGS_H
 #define TOS_EFLAGS_H
 
-#include "../sys.h"
-#include "../types.h"
+#include "sys.h"
+#include "types.h"
 
 uint32 get_eflags();
 

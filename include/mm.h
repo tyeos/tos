@@ -27,12 +27,12 @@ typedef struct {
  * 地址内存池，所有内存地址分配都用这一套
  */
 typedef struct memory_alloc_t {
-    uint addr_start;      // 有效内存起始地址
-    uint addr_end;        // 有效内存结束地址
-    uint available_size;  // 有效内存大小（ addr_end - addr_start + 1 ）
+    uint32 addr_start;      // 有效内存起始地址
+    uint32 addr_end;        // 有效内存结束地址
+    uint32 available_size;  // 有效内存大小（ addr_end - addr_start + 1 ）
     bitmap_t bitmap;      // 用位图管理内存分配
     uint16 *pde_counter;  // 用来记录页每一个目录项关联的页表数
-} memory_alloc_t;
+} __attribute__((packed)) memory_alloc_t;
 
 /*
  * 内存池标记，用于判断用哪个内存池

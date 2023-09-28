@@ -5,7 +5,7 @@
 #include "../include/stdarg.h"
 #include "../include/console.h"
 #include "../include/sys.h"
-#include "../include/bridge/eflags.h"
+#include "../include/eflags.h"
 
 static char buf[1024];
 

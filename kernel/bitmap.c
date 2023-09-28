@@ -15,7 +15,7 @@ uint32 bitmap_init(bitmap_t *bitmap) {
 }
 
 // 申请占用1bit, 成功返回在位图中的位置, 失败范围 ERR_IDX
-int32 bitmap_alloc(bitmap_t *bitmap) {
+int bitmap_alloc(bitmap_t *bitmap) {
     if (!bitmap->total) {
         printk("[%s] %p no bits available!\n", __FUNCTION__, bitmap);
         return ERR_IDX;
@@ -42,7 +42,7 @@ int32 bitmap_alloc(bitmap_t *bitmap) {
 }
 
 // 释放占用的1bit, 成功返回在位图中的位置, 失败范围 ERR_IDX
-int32 bitmap_free(bitmap_t *bitmap, uint32 cursor) {
+int bitmap_free(bitmap_t *bitmap, uint32 cursor) {
     if (cursor >= bitmap->total) {
         printk("[%s] %p cursor err [0x%X / 0x%X] \n", __FUNCTION__, bitmap, cursor, bitmap->total);
         return ERR_IDX;

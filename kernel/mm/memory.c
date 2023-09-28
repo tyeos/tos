@@ -4,9 +4,7 @@
 
 #include "../../include/mm.h"
 #include "../../include/print.h"
-#include "../../include/string.h"
 #include "../../include/sys.h"
-#include "../../include/bridge/eflags.h"
 
 #define ARDS_TIMES_ADDR 0xE00
 #define ARDS_BUFFER_ADDR 0x1000

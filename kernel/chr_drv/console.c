@@ -4,8 +4,7 @@
 
 #include "../../include/types.h"
 #include "../../include/string.h"
-#include "../../include/bridge/io.h"
-#include "../../include/sys.h"
+#include "../../include/io.h"
 
 /*
     ------------------------------------------------------------------------------------

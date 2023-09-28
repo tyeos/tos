@@ -2,7 +2,7 @@
 // Created by toney on 2023-09-03.
 //
 
-#include "../include/bridge/io.h"
+#include "../include/io.h"
 #include "../include/print.h"
 #include "../include/int.h"
 

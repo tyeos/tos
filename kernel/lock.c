@@ -3,7 +3,7 @@
 //
 
 #include "../include/lock.h"
-#include "../include/bridge/eflags.h"
+#include "../include/eflags.h"
 #include "../include/print.h"
 
 extern task_t *current_task;

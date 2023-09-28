@@ -74,7 +74,7 @@ hd3:
 	$(shell rm -f $(BUILD_HD3_IMG))
 	bximage -q -hd=$(word 4, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD3_IMG)
 
-hd_ex: hd1 hd2 hd3
+hd_ex: mkdir hd1 hd2 hd3
 
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@
@@ -100,7 +100,7 @@ kernel: $(BUILD_BRIDGE_O_FILES) $(BUILD_KERNEL_O_FILES)
 
 build: mkdir $(BUILD_BOOT_O_FILES) kernel
 
-all: hd0 build
+all: hd_ex hd0 build
 	# MBR装在0盘0道1扇区
 	dd if=$(word 1, $(BUILD_BOOT_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=0 count=1 conv=notrunc
 	# 给loader分配4个扇区
