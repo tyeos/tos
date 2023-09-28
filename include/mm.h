@@ -6,6 +6,7 @@
 #define TOS_MM_H
 
 #include "types.h"
+#include "bitmap.h"
 
 #define PAGE_SIZE 4096
 
@@ -29,11 +30,7 @@ typedef struct memory_alloc_t {
     uint addr_start;      // 有效内存起始地址
     uint addr_end;        // 有效内存结束地址
     uint available_size;  // 有效内存大小（ addr_end - addr_start + 1 ）
-    uint pages_total;     // 有效内存页数 ( available_size >> 12 )
-    uint pages_used;      // 已分配的内存页数
-    uint alloc_cursor;    // 内存分配游标, 指向下一次分配page在位图中对应bit的位置
-    uint bitmap_bytes;    // 位图占用字节数, 物理内存理论最大值为4GB>>12>>3, 即128KB=131072, 实际4G物理空间不可能全允许分配使用
-    uint8 *bitmap;        // 位图，记录页分配情况，1bit映射一个page, 1byte映射8个page
+    bitmap_t bitmap;      // 用位图管理内存分配
     uint16 *pde_counter;  // 用来记录页每一个目录项关联的页表数
 } memory_alloc_t;
 

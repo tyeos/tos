@@ -18,4 +18,7 @@
  */
 #define HLT __asm__("hlt");
 
+#define STOP __asm__("cli; hlt;"); // 关中断并释放CPU，即让程序停止执行
+#define SLEEP(times) for (int i = 0; i < times; ++i) HLT ; // 暂停指定次数个时钟周期
+
 #endif //TOS_SYS_H

@@ -208,13 +208,11 @@ static void kernel_virtual_memory_alloc_init() {
     g_kernel_memory.addr_start = KERNEL_VIRTUAL_ALLOC_MEMORY_BASE;
     g_kernel_memory.addr_end = KERNEL_VIRTUAL_ALLOC_MEMORY_MAX_END;
     g_kernel_memory.available_size = g_kernel_memory.addr_end - g_kernel_memory.addr_start + 1;
-    g_kernel_memory.pages_total = g_kernel_memory.available_size >> 12;
-    g_kernel_memory.pages_used = 0;
-    g_kernel_memory.alloc_cursor = 0;
-    g_kernel_memory.bitmap_bytes = (g_kernel_memory.pages_total + 7) / 8; // 1个字节可以表示8个物理页的使用情况
-    g_kernel_memory.bitmap = (uint8 *) KERNEL_MEM_BITMAP_ADDR;
-    memset(g_kernel_memory.bitmap, 0, g_kernel_memory.bitmap_bytes); // 清零
-    printk("available kernel virtual memory pages %d: [0x%x~0x%x]\n", g_kernel_memory.pages_total,
+
+    g_kernel_memory.bitmap.total = g_kernel_memory.available_size >> 12; // 一共可分配多少页
+    g_kernel_memory.bitmap.map = (uint8 *) KERNEL_MEM_BITMAP_ADDR;
+    bitmap_init(&g_kernel_memory.bitmap);
+    printk("available kernel virtual memory pages %d: [0x%x~0x%x]\n", g_kernel_memory.bitmap.total,
            g_kernel_memory.addr_start, g_kernel_memory.addr_end);
 }
 
@@ -233,18 +231,15 @@ void user_virtual_memory_alloc_init(memory_alloc_t *user_alloc) {
      * 如果要扩展，可以在内核中申请连续的虚拟内存页即可，
      * 最大可配置支持申请 3GB-4MB 的虚拟内存，即对应也需要申请24个(3GB>>12>>12>>3)连续的内存页给位图。
      */
-    user_alloc->bitmap = alloc_kernel_page();
-    memset(user_alloc->bitmap, 0, user_alloc->bitmap_bytes); // 清零
-
     user_alloc->addr_start = USER_VIRTUAL_ALLOC_MEMORY_BASE;
     user_alloc->available_size = PAGE_SIZE << 12 << 3;
     user_alloc->addr_end = user_alloc->addr_start + user_alloc->available_size - 1;
-    user_alloc->pages_total = user_alloc->available_size >> 12;
-    user_alloc->pages_used = 0;
-    user_alloc->alloc_cursor = 0;
-    user_alloc->bitmap_bytes = (user_alloc->pages_total + 7) / 8; // 1个字节可以表示8个物理页的使用情况
 
-    printk("available user virtual memory pages %d: [0x%x~0x%x]\n", user_alloc->pages_total,
+    user_alloc->bitmap.total = user_alloc->available_size >> 12;
+    user_alloc->bitmap.map = alloc_kernel_page();
+    bitmap_init(&user_alloc->bitmap);
+
+    printk("available user virtual memory pages %d: [0x%x~0x%x]\n", user_alloc->bitmap.total,
            user_alloc->addr_start, user_alloc->addr_end);
 }
 
@@ -560,36 +555,17 @@ static void *_alloc_virtual_page(enum pool_flags pf) {
     if (pf == PF_KERNEL) {
         mp = &g_kernel_memory;
     }
-    if (!mp->pages_total) {
-        printk("[%s] no memory available!\n", __FUNCTION__);
-        return NULL;
-    }
-    if (mp->pages_used >= mp->pages_total) {
-        printk("[%s] memory used up [0x%x / 0x%x]!\n", __FUNCTION__, mp->pages_used, mp->pages_total);
-        CLI
-        HLT
+
+    int32 idx = bitmap_alloc(&mp->bitmap);
+    if (idx == ERR_IDX) {
+        printk("[%s] memory error!\n", __FUNCTION__);
+        STOP
         return NULL;
     }
 
-    // 查找次数最多为总页数
-    for (uint cursor, index, i = 0; i < mp->pages_total; i++) {
-        cursor = (mp->alloc_cursor + i) % mp->pages_total;
-        index = cursor / 8;
-        if (mp->bitmap[index] & (1 << cursor % 8)) {
-            continue; // 已分配
-        }
-        mp->bitmap[index] |= (1 << cursor % 8);
-        mp->pages_used++;
-        mp->alloc_cursor = cursor + 1;
-        void *p = (void *) (mp->addr_start + (cursor << 12));
-        printk("[%s] alloc page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
-               mp->bitmap[index], mp->pages_used);
-        return p;
-    }
-
-    // 前面已经进行空间预测, 逻辑不会走到这里
-    printk("[%s] memory error!\n", __FUNCTION__);
-    return NULL;
+    void *p = (void *) (mp->addr_start + (idx << 12));
+    printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, mp->bitmap.total);
+    return p;
 }
 
 /*
@@ -607,13 +583,8 @@ static void _free_virtual_page(enum pool_flags pf, void *p) {
         return;
     }
 
-    uint cursor = (uint) (p - mp->addr_start) >> 12;
-    uint index = cursor / 8;
-    mp->bitmap[index] &= ~(1 << cursor % 8);
-    mp->pages_used--;
-
-    printk("[%s] free page: 0x%X, bits %d: [0x%X], used: %d pages\n", __FUNCTION__, p, index,
-           mp->bitmap[index], mp->pages_used);
+    bitmap_free(&mp->bitmap, (uint32) (p - mp->addr_start) >> 12);
+    printk("[%s] free page: 0x%X, used: %d pages\n", __FUNCTION__, p, mp->bitmap.used);
 }
 
 

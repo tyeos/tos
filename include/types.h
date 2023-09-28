@@ -6,8 +6,9 @@
 #define TOS_TYPES_H
 
 
-#define EOS '\0' // End Of String
-#define NULL ((void *)0) // null pointer
+#define EOS '\0'            // End Of String
+#define NULL ((void *)0)    // null pointer
+#define ERR_IDX (-1)        // error index
 
 typedef char int8;
 typedef short int16;

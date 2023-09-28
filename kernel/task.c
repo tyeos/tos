@@ -108,7 +108,7 @@ static void clear_task(task_t *task) {
     printk("ready clear task %p\n", task);
     task->state = TASK_DIED;
     chain_remove(&tasks, &task->chain_elem);
-    free_bit(&pids, task->pid);
+    bitmap_free(&pids, task->pid);
     free_kernel_page(task);
 }
 
@@ -149,7 +149,7 @@ static task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func
     memset(task, 0, PAGE_SIZE);
 
     // task初始化
-    task->pid = alloc_bit(&pids);
+    task->pid = bitmap_alloc(&pids);
     task->func = func;
     task->elapsed_ticks = 0;
     task->kstack = (uint32) task + PAGE_SIZE;
@@ -170,7 +170,7 @@ static task_t *create_user_process(char *name, uint8 priority, task_func_t func)
     memset(task, 0, PAGE_SIZE);
 
     // task初始化
-    task->pid = alloc_bit(&pids);
+    task->pid = bitmap_alloc(&pids);
     task->func = func;
     task->elapsed_ticks = 0;
     task->kstack = (uint32) task + PAGE_SIZE;
@@ -260,10 +260,8 @@ static void *idle(void *args) {
 
 void task_init() {
     pids.map = kmalloc(1024 >> 3); // 最多支持分配1024个任务
-    pids.cursor = 0;
-    pids.used = 0;
-    pids.total_bits = 1024;
-
+    pids.total = 1024;
+    bitmap_init(&pids);
     chain_init(&tasks);
 
     idle_task = create_kernel_thread("idle", 1, idle); // 第一个创建的任务，pid一定为0
