@@ -3,6 +3,8 @@
 //
 
 #include "../include/chain.h"
+#include "../include/print.h"
+#include "../include/sys.h"
 
 // 添加首个元素
 void chain_init(chain_t *chain) {
@@ -17,9 +19,11 @@ void chain_init(chain_t *chain) {
     // 修改head前后项
     chain->head.prev = NULL;
     chain->head.next = &chain->tail;
+    chain->head.value = NULL;
     // 修改tail前后项
     chain->tail.prev = &chain->head;
     chain->tail.next = NULL;
+    chain->tail.value = NULL;
 }
 
 // 在某个元素前插入元素
@@ -95,7 +99,18 @@ chain_elem_t *chain_remove(chain_t *chain, chain_elem_t *elem) {
 
     chain->size--;
     return elem;
+}
 
+// 通过元素中的value删除某个元素
+chain_elem_t *chain_remove_by_value(chain_t *chain, void *value) {
+    if (chain->size == 0 || value == NULL) return NULL;
+    chain_elem_t *elem = &chain->head;
+    for (int i = 0; i < chain->size; ++i) {
+        elem = elem->next;
+        if (elem->value == value) break;
+    }
+    if (!elem->value) return NULL;
+    return chain_remove(chain, elem);
 }
 
 // 弹出链表首部元素
@@ -122,4 +137,37 @@ uint32 chain_len(chain_t *chain) {
 // 返回链表是否为空
 bool chain_empty(chain_t *chain) {
     return chain->size == 0 || chain->head.next == &chain->tail;
+}
+
+/*
+ * 链表缓存池初始化
+ */
+void chain_pool_init(chain_elem_pool_t *pool) {
+    pool->rest = pool->size;
+    pool->cursor = pool->addr;
+    chain_init(&pool->chain);
+}
+
+chain_elem_t *chain_pool_get(chain_elem_pool_t *pool) {
+    if (pool->size < sizeof(chain_elem_t)) {
+        printk("chain pool is not initialized!\n");
+        STOP
+        return NULL;
+    }
+    if (pool->chain.size > 0) return chain_pop_first(&pool->chain);
+    if (pool->rest < sizeof(chain_elem_t)) return NULL;
+    chain_elem_t *elem = (chain_elem_t *) pool->cursor;
+    pool->rest -= sizeof(chain_elem_t);
+    pool->cursor += sizeof(chain_elem_t);
+    return elem;
+}
+
+chain_elem_t *chain_pool_getv(chain_elem_pool_t *pool, void *value) {
+    chain_elem_t *elem = chain_pool_get(pool);
+    if (elem) elem->value = value;
+    return elem;
+}
+
+void chain_pool_ret(chain_elem_pool_t *pool, chain_elem_t *elem) {
+    chain_put_last(&pool->chain, elem);
 }

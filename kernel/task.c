@@ -61,11 +61,12 @@
  * --------------------------------------------------------------------------------------------------------------------
  */
 
-bitmap_t pids;
-chain_t tasks;
+static bitmap_t pids;
+static chain_t tasks;
+static chain_elem_pool_t elem_pool;
 
+static task_t *idle_task;
 task_t *current_task = NULL;
-task_t *idle_task;
 
 
 /*
@@ -91,9 +92,8 @@ void task_scheduler_ticks() {
 
     // 换下一个任务
     for (int i = 0; i < tasks.size; ++i) {
-        // 元素指针地址 减去 元素在结构体内的偏移量, 也可直接 &0xFFFFF000 获取PCB地址，因为task地址都是按页分配的
-        task_t *task = (task_t *) ((char *) chain_pop_first(&tasks) - (uint32) (&((task_t *) NULL)->chain_elem));
-        if (task->state != TASK_DIED) chain_put_last(&tasks, &task->chain_elem); // 正常任务取出后添加到最后
+        task_t *task = (task_t *) chain_pop_first(&tasks)->value;
+        if (task->state != TASK_DIED) chain_put_last(&tasks, task->chain_elem); // 正常任务取出后添加到最后
         if (task->state != TASK_READY) continue; // 只查找处于就绪态的任务
 
         task->ticks--;
@@ -108,7 +108,8 @@ void task_scheduler_ticks() {
 static void clear_task(task_t *task) {
     printk("ready clear task %p\n", task);
     task->state = TASK_DIED;
-    chain_remove(&tasks, &task->chain_elem);
+    chain_remove(&tasks, task->chain_elem);
+    chain_pool_ret(&elem_pool, task->chain_elem);
     bitmap_free(&pids, task->pid);
     free_kernel_page(task);
 }
@@ -133,8 +134,8 @@ uint32 exit_current_task() {
     }
 
     // 其他任务的终止，换到idle上来调度
-    chain_remove(&tasks, &idle_task->chain_elem);
-    chain_put_last(&tasks, &idle_task->chain_elem);
+    chain_remove(&tasks, idle_task->chain_elem);
+    chain_put_last(&tasks, idle_task->chain_elem);
     current_task = idle_task;
     return 0;
 }
@@ -161,7 +162,9 @@ static task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func
     strcpy(task->name, name);
 
     // 添加到任务队列末尾
-    chain_put_last(&tasks, &task->chain_elem);
+    chain_elem_t *elem = chain_pool_getv(&elem_pool, task);
+    task->chain_elem = elem;
+    chain_put_last(&tasks, elem);
     return task;
 }
 
@@ -187,7 +190,9 @@ static task_t *create_user_process(char *name, uint8 priority, task_func_t func)
     user_virtual_memory_alloc_init(&task->user_vaddr_alloc);
 
     // 添加到任务队列末尾
-    chain_put_last(&tasks, &task->chain_elem);
+    chain_elem_t *elem = chain_pool_getv(&elem_pool, task);
+    task->chain_elem = elem;
+    chain_put_last(&tasks, elem);
     return task;
 }
 
@@ -259,10 +264,16 @@ static void *idle(void *args) {
 }
 
 void task_init() {
-    pids.map = kmalloc(1024 >> 3); // 最多支持分配1024个任务
-    pids.total = 1024;
+    pids.map = kmalloc(256 >> 3); // 最多支持分配256个任务
+    pids.total = 256;
     bitmap_init(&pids);
     chain_init(&tasks);
+    // lock_init(&test_lock);
+
+    // 一页内存最多可分配 PAGE_SIZE/sizeof(chain_elem_t) ≈ 341 个链表元素, 大于任务数即可
+    elem_pool.addr = alloc_kernel_page();
+    elem_pool.size = PAGE_SIZE;
+    chain_pool_init(&elem_pool);
 
     idle_task = create_kernel_thread("idle", 1, idle); // 第一个创建的任务，pid一定为0
 }

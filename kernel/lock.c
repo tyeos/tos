@@ -6,6 +6,7 @@
 #include "../include/eflags.h"
 #include "../include/print.h"
 
+static chain_elem_pool_t waiter_pool;
 extern task_t *current_task;
 
 // 初始化锁
@@ -14,6 +15,11 @@ void lock_init(lock_t *l) {
     l->repeat = 0;
     l->sema.value = 1; // 初始信号量为1
     chain_init(&l->sema.waiters); // 等待队列
+
+    // 等待队列池
+    waiter_pool.addr = alloc_kernel_page();
+    waiter_pool.size = PAGE_SIZE;
+    chain_pool_init(&waiter_pool);
 }
 
 /* 获取锁 */
@@ -28,7 +34,7 @@ void lock(lock_t *l) {
     bool iflag = check_close_if(); // 关中断保证原子操作
     while (l->sema.value == 0) {
         // 无可用信号量，将当前任务加到等待队列
-        chain_put_last(&l->sema.waiters, &current_task->chain_lock);
+        chain_put_last(&l->sema.waiters, chain_pool_getv(&waiter_pool, current_task));
 
         // 阻塞当前任务
         current_task->state = TASK_BLOCKED;  // 将当前任务设为阻塞态
@@ -68,9 +74,10 @@ void unlock(lock_t *l) {
     // 处理等待任务队列
     while (true) {
         // 取出第一个等待的任务
-        task_t *task = (task_t *) ((uint32) chain_pop_first(&l->sema.waiters) & 0xFFFFF000);
-        if (!task) break; // 如果没有就不管了
-
+        chain_elem_t *elem = chain_pop_first(&l->sema.waiters);
+        if (!elem) break; // 没有等待的任务
+        task_t *task = (task_t *) elem->value;
+        chain_pool_ret(&waiter_pool, elem);
         // 这里任务一定是处于阻塞态, 除非任务已经被清理, 那就找下一个
         if (task->state != TASK_BLOCKED) continue;
 

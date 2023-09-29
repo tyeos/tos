@@ -155,8 +155,7 @@ typedef struct task_t {
     /* 以上字段位置不要做调整，在汇编中会根据变量位置找值，下面的变量可做调整 */
 
     task_state_t state;              // 进程状态，enum占4字节
-    chain_elem_t chain_elem;         // 在任务队列中元素指针
-    chain_elem_t chain_lock;         // 在锁队列中元素指针（由于chain是无value设计，所以在不同的队列中要使用不同的elem）
+    chain_elem_t *chain_elem;        // 在任务队列中的元素指针
     memory_alloc_t user_vaddr_alloc; // 用户进程的虚拟地址池（该属性给用户进程使用）
     uint8 ticks;                     // 占用CPU的时间滴答数（用中断次数表示，初始值为优先级）
     uint8 priority;                  // 任务优先级，值越大级别越高
