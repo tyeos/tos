@@ -9,17 +9,22 @@
 static chain_elem_pool_t waiter_pool;
 extern task_t *current_task;
 
+void semaphore_init() {
+    // 支持重复调用，初始化一次即可
+    if (waiter_pool.addr) return;
+    // 信号量等待队列池，一般信号量都是频繁使用释放，但不会用同时很多，这里申请一页内存给所有使用信号量的地方共享
+    waiter_pool.addr = alloc_kernel_page();
+    waiter_pool.size = PAGE_SIZE;
+    chain_pool_init(&waiter_pool);
+}
+
 // 初始化锁
 void lock_init(lock_t *l) {
     l->holder = NULL;
     l->repeat = 0;
     l->sema.value = 1; // 初始信号量为1
     chain_init(&l->sema.waiters); // 等待队列
-
-    // 等待队列池
-    waiter_pool.addr = alloc_kernel_page();
-    waiter_pool.size = PAGE_SIZE;
-    chain_pool_init(&waiter_pool);
+    semaphore_init();
 }
 
 /* 获取锁 */
