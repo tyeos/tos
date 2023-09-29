@@ -11,8 +11,6 @@
 #include "../include/syscall.h"
 #include "../include/io.h"
 
-extern void test_read_disk();
-
 void kernel_main(void) {
     console_clear();
     physical_memory_init();
@@ -21,10 +19,9 @@ void kernel_main(void) {
     idt_init();
     clock_init();
     syscall_init();
-//    task_init();
+    task_init();
+    ide_init();
     STI
-
-    test_read_disk();
 
     while (true) {
         printk("main block! \n");

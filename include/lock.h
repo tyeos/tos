@@ -23,6 +23,10 @@ typedef struct lock_t {
     uint32 repeat;     // 锁的持有者重复申请锁的次数
 } lock_t;
 
+void sema_init(semaphore_t* sema, uint8 init_value);
+void sema_down(semaphore_t* sema);
+void sema_up(semaphore_t* sema);
+
 void lock_init(lock_t *l);
 void lock(lock_t *l);
 void unlock(lock_t *l);

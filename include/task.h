@@ -168,4 +168,11 @@ void task_scheduler_ticks();
 uint32 exit_current_task();
 uint32 get_current_task_pid() ;
 
+
+// test tasks
+void *kernel_task_a(void *args);
+void *kernel_task_b(void *args);
+void *user_task_a(void *args);
+void *user_task_b(void *args);
+
 #endif //TOS_TASK_H

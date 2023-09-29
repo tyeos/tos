@@ -7,11 +7,11 @@
 #include "../include/sys.h"
 #include "../include/eflags.h"
 
-static char buf[1024];
-
 extern int vsprintf(char *buf, const char *fmt, va_list args);
 
-int printk(const char * fmt, ...) {
+static char buf[1024];
+
+int printk(const char *fmt, ...) {
     bool iflag = check_close_if();
 
     // 处理参数并输出信息到控制台
@@ -23,5 +23,13 @@ int printk(const char * fmt, ...) {
     console_write(buf, size);
 
     check_recover_if(iflag);
+    return size;
+}
+
+int sprintfk(char *dest, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int size = vsprintf(dest, fmt, args);
+    va_end(args);
     return size;
 }

@@ -9,10 +9,10 @@
 
 // 单字节读入
 char inb(int port);
-// 单字节写出
+// 单字读入
 short inw(int port);
 
-// 单字读入
+// 单字节写出
 void outb(int port, uint32 value);
 // 单字写出
 void outw(int port, uint32 value);

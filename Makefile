@@ -101,6 +101,10 @@ kernel: $(BUILD_BRIDGE_O_FILES) $(BUILD_KERNEL_O_FILES)
 build: mkdir $(BUILD_BOOT_O_FILES) kernel
 
 all: hd_ex hd0 build
+	# dd是转换和复制文件的命令：
+	# 	  if为源文件，of为输出文件，bs为块大小，count为复制块的数量,
+	# 	  seek表示跳过几个块开始写(针对目标文件), skip为跳过几个块开始读(针对源文件),
+	# 	  conv=notrunc表示不要截断文件(截断就是到此为止,后面全删)
 	# MBR装在0盘0道1扇区
 	dd if=$(word 1, $(BUILD_BOOT_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=0 count=1 conv=notrunc
 	# 给loader分配4个扇区

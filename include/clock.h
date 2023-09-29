@@ -81,7 +81,7 @@
 #define CLOCK_TICK_RATE 1193182 // 时钟每秒脉冲个数。若要1秒中断HZ次, 则每个HZ需要 CLOCK_TICK_RATE/HZ 个时钟
 #define CLOCK_COUNTER ((CLOCK_TICK_RATE + HZ/2) / HZ) // 先加HZ/2是为取更高的精度, CLOCK_COUNTER最小值为1(中断频率最高), 最大值为65536(用0时表示,中断频率最低)
 
-#define MS2TIMES(ms) ((ms * HZ + (HZ > 999 ? 0 : 1000 - HZ)) / 1000) // millisecond to times: 毫秒转中断次数
+#define MS2TIMES(ms) ((ms * HZ + (HZ > 999 ? 0 : 1000 - HZ)) / 1000) // millisecond to times: 毫秒转中断次数，这里保证若ms大于1则至少中断一次
 #define S2TIMES(s) (s * HZ) // second to times: 秒转中断次数
 
 #endif //TOS_CLOCK_H

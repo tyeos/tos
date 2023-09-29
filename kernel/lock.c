@@ -19,7 +19,7 @@ void semaphore_init() {
 }
 
 // 初始化信号量（信号量支持单独使用，也可以配合锁一起用）
-void sema_init(semaphore_t* sema, uint8 init_value) {
+void sema_init(semaphore_t *sema, uint8 init_value) {
     sema->value = init_value;             // 初始信号量
     chain_init(&sema->waiters);     // 初始化等待队列
     semaphore_init();                     // 初始化等待队列池
@@ -33,7 +33,7 @@ void lock_init(lock_t *l) {
 }
 
 // 申请信号量
-void sema_down(semaphore_t* sema) {
+void sema_down(semaphore_t *sema) {
     // 关中断保证原子操作
     bool iflag = check_close_if();
     while (!sema->value) {
@@ -48,7 +48,6 @@ void sema_down(semaphore_t* sema) {
         // 信号量被释放，当前任务重新被唤醒，进入运行态
         iflag = check_close_if();           // 关中断，重新获取信号量
     }
-
     // 已有信号量，进行分配
     sema->value--;            // 目前信号量只有0和1，这里将信号量置0
     check_recover_if(iflag);  // 恢复中断
@@ -70,7 +69,7 @@ void lock(lock_t *l) {
 }
 
 // 释放/恢复 信号量
-void sema_up(semaphore_t* sema) {
+void sema_up(semaphore_t *sema) {
     bool iflag = check_close_if(); // 关中断保证原子操作
     // 预处理等待任务队列
     while (true) {
@@ -84,6 +83,10 @@ void sema_up(semaphore_t* sema) {
         task->state = TASK_READY;
         // 如果只唤醒第一个等待的任务，有可能其还没等到进入运行态就被回收掉了，那其他任务就全阻塞了
         // 所以这里将所有等待任务都唤醒，让其自行竞争，不在这里break
+    }
+    if (sema->value) {
+        printk("[%s] repeat~\n", __FUNCTION__);
+        STOP
     }
     sema->value++; // 目前信号量只有0和1，这里将信号量置1
     check_recover_if(iflag); // 恢复中断

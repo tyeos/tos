@@ -13,4 +13,6 @@ void idt_init();
 
 void clock_init();
 
+void ide_init();
+
 #endif //TOS_INIT_H
