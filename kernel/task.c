@@ -197,7 +197,7 @@ static task_t *create_user_process(char *name, uint8 priority, task_func_t func)
 static void *idle(void *args) {
     ide_init();
 
-//    create_kernel_thread("K_A", 2, kernel_task_a);
+    create_kernel_thread("K_A", 2, kernel_task_a);
 //    create_kernel_thread("K_B", 1, kernel_task_b);
 //    create_user_process("U_PA", 1, user_task_a);
 //    create_user_process("U_PB", 1, user_task_b);

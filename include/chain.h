@@ -24,7 +24,7 @@ typedef struct chain_t {
     chain_elem_t head; // 头部节点
     chain_elem_t tail; // 尾部节点
     uint32 size;       // 正在使用的链表长度
-} chain_t;
+} __attribute__((packed)) chain_t;
 
 /*
  * 链表元素池，从这里申请链表元素，
@@ -37,7 +37,7 @@ typedef struct chain_elem_pool_t {
     char *cursor;          // 地址分配记录
     uint32 rest;           // 剩余待分配的地址大小
     chain_t chain;         // 已启用的缓存
-} chain_elem_pool_t;
+} __attribute__((packed)) chain_elem_pool_t;
 
 // 初始化链表
 void chain_init(chain_t *chain);

@@ -1,4 +1,5 @@
 BUILD := ./build
+BUILD_HDX := ./build_hdx
 
 ASM_FILE_SUFFIX := .asm
 C_FILE_SUFFIX := .c
@@ -33,9 +34,9 @@ BUILD_KERNEL_MAP := $(BUILD)/kernel.map
 
 # MBR最多支持挂四块盘
 BUILD_HD_IMG := $(BUILD)/hd.img
-BUILD_HD1_IMG := $(BUILD)/hd1.img
-BUILD_HD2_IMG := $(BUILD)/hd2.img
-BUILD_HD3_IMG := $(BUILD)/hd3.img
+BUILD_HD1_IMG := $(BUILD_HDX)/hd1.img
+BUILD_HD2_IMG := $(BUILD_HDX)/hd2.img
+BUILD_HD3_IMG := $(BUILD_HDX)/hd3.img
 HD_IMG_SIZES := 16 80 10 32
 
 # 由于是自己写的内核，所以很多C标准库的东西不可用，比如标准库的打印函数，或是不需要的，这里把相关内容都屏蔽掉
@@ -56,33 +57,29 @@ mkdir:
 	$(shell mkdir -p $(BUILD)/$(BOOT))
 	$(shell mkdir -p $(BUILD)/$(BRIDGE))
 	$(foreach v, $(KERNEL_DIRS), $(shell mkdir -p $(BUILD)/$(v)))
+	$(shell mkdir -p $(BUILD_HDX))
 
-hd0: # 操作系统盘每次安装都重建
+hd: # 操作系统盘每次安装都重建
 	$(shell rm -f $(BUILD_HD_IMG))
 	# 创建硬盘镜像文件，-hd指定镜像大小，单位MB，关于该指令可参考 READ_bximage.md
 	bximage -q -hd=$(word 1, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD_IMG)
 
 hd1: # 常规磁盘如果不存在再新建
-	if [ -e  $(word 2, $(HD_IMG_SIZES)) ]; then \
+	if [ ! -e $(BUILD_HD1_IMG) ]; then \
 	  	bximage -q -hd=$(word 2, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD1_IMG); \
   	fi
 
 hd2:
-	if [ -e  $(word 3, $(HD_IMG_SIZES)) ]; then \
+	if [ ! -e $(BUILD_HD2_IMG) ]; then \
 	  	bximage -q -hd=$(word 3, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD2_IMG); \
   	fi
 
 hd3:
-	if [ -e  $(word 4, $(HD_IMG_SIZES)) ]; then \
+	if [ ! -e $(BUILD_HD3_IMG) ]; then \
 	  	bximage -q -hd=$(word 4, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD3_IMG); \
   	fi
 
-hd_ex: hd1 hd2 hd3
-
-hd_ex_clean:
-	$(shell rm -f $(BUILD_HD1_IMG))
-	$(shell rm -f $(BUILD_HD2_IMG))
-	$(shell rm -f $(BUILD_HD3_IMG))
+hdx: hd1 hd2 hd3
 
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@
@@ -108,7 +105,7 @@ kernel: $(BUILD_BRIDGE_O_FILES) $(BUILD_KERNEL_O_FILES)
 
 build: mkdir $(BUILD_BOOT_O_FILES) kernel
 
-all: build hd0 hd_ex
+all: build hd hdx
 	# dd是转换和复制文件的命令：
 	# 	  if为源文件，of为输出文件，bs为块大小，count为复制块的数量,
 	# 	  seek表示跳过几个块开始写(针对目标文件), skip为跳过几个块开始读(针对源文件),
@@ -121,7 +118,10 @@ all: build hd0 hd_ex
 	dd if=$(BUILD_KERNEL_BIN) of=$(BUILD_HD_IMG) bs=512 seek=5 count=100 conv=notrunc
 
 bochs: all
-	$(shell rm -f $(BUILD)/hd.img.lock)
+	$(shell rm -f $(BUILD_HD_IMG).lock)
+	$(shell rm -f $(BUILD_HD1_IMG).lock)
+	$(shell rm -f $(BUILD_HD2_IMG).lock)
+	$(shell rm -f $(BUILD_HD3_IMG).lock)
 	bochs -q -f bochsrc
 
 qemu: all
@@ -145,8 +145,14 @@ qemu_gdb: all
 		-drive file=$(BUILD_HD2_IMG),format=raw,index=2,media=disk \
 		-drive file=$(BUILD_HD3_IMG),format=raw,index=3,media=disk
 
+clean_hdx:
+	$(shell rm -f $(BUILD_HDX))
+
+# 如果仅是.h文件的修改最好是先clean保证其生效
 clean:
 	$(shell rm -rf $(BUILD))
 	$(shell rm -f ./bx_enh_dbg.ini)
+
+clean_all: clean clean_hdx
 
 .PHONY: mkdir clean

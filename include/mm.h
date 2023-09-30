@@ -18,12 +18,12 @@ typedef struct {
     uint32 length_low;       // 内存块长度的低32位
     uint32 length_high;      // 内存块长度的高32位
     uint32 type;             // 内存块的类型, 1为可用, 其他为保留
-} ards_t;
+} __attribute__((packed)) ards_t;
 
 typedef struct {
     uint16 times; // 内存检测次数
     ards_t *ards; // 地址范围描述符结构
-} checked_memory_info_t;
+} __attribute__((packed)) checked_memory_info_t;
 
 /*
  * 地址内存池，所有内存地址分配都用这一套

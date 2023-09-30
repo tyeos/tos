@@ -17,7 +17,7 @@
 void *kernel_task_a(void *args) {
     printk("K_A start~\n");
 
-    const uint32 page_count = 2;
+    const uint32 page_count = 1;
     uint32 *pages[page_count];
     for (int i = 0; i < page_count; ++i) {
         pages[i] = alloc_kernel_page();
@@ -32,12 +32,14 @@ void *kernel_task_a(void *args) {
     // 测试读盘
     printk("test ide read start ~ \n");
     ide_read(get_disk(0, 0), 0, buff, sec_cnt);
-    print_hex_buff(buff, (sec_cnt > 3 ? 3 : sec_cnt) << 9);
+    print_hex_buff(buff, 1 << 9);
+    printk(".. to 0x%x:\n", ((sec_cnt - 1) << 9));
+    print_hex_buff(buff + ((sec_cnt - 1) << 9), 1 << 9);
     printk("test ide read end ~ \n");
 
     // 测试写盘
     printk("test ide write start ~~ \n");
-    ide_write(get_disk(0, 1), 0, buff, sec_cnt);
+    ide_write(get_disk(1, 0), 1, buff, sec_cnt);
     printk("test ide write end ~~ \n");
 
     // 测试读基本信息

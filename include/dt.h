@@ -50,7 +50,7 @@ typedef struct interrupt_gate {
 typedef struct dt_ptr {
     uint16 limit; // 描述符表界限
     uint32 base;    // 描述符表基址
-} dt_ptr;
+} __attribute__((packed)) dt_ptr;
 #pragma pack()
 
 void update_tss_esp(uint32 esp0);
