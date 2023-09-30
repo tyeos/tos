@@ -59,11 +59,17 @@
 #define BIT_ALT_STAT_DRQ 0x8    // 数据传输准备好了
 
 
+#define PRIMARY_PARTITION_BASE_IDX 1 // 主分区号从1开始（具体看MBR分区表中的位置，1~4）
+#define LOGIC_PARTITION_BASE_IDX 5   // 逻辑分区号从5开始依次递增
+
 // 最多两个IDE通道
 static ide_channel_t channels[2];
-static uint8 channel_cnt = 0;
-// 硬盘总数量
-static uint8 hd_cnt = 0;
+static uint8 channel_cnt = 0;   // 总通道数
+static uint8 hd_cnt = 0;        // 总硬盘数
+
+
+//static chain_t partition_chain; // 分区队列
+//static chain_elem_pool_t partition_pool; // 分区池
 
 
 // 获取硬盘数量
@@ -73,36 +79,6 @@ static void hd_count_init() {
     channel_cnt = hd_cnt > 2 ? 2 : 1;
     printk("ide: hd_cnt = %d \n", hd_cnt);
 }
-
-//
-//    /*分别获取两个硬盘的参数及分区信息*/
-//    while(dev_no<2){
-//        struct disk_t* hd = &channel->devices[dev_no];
-//        hd->channel=channel;
-//        hd->dev_no=dev_no;
-//        sprintf(hd->name,"sd%c",'a'+channelogic_no*2+dev_no);
-//        identify_disk(hd);
-////获取硬盘参数
-//        if(dev_no!=0){//内核本身的裸硬盘（hd60M.img)不处理
-//            partition_scan(hd,0);//扫描该硬盘上的分区
-//        }
-//        primary_no=0,1_no=0;
-//        dev_no++;
-//    }
-//    dev_no=0;
-////将硬盘驱动器号置0,为下一个channe1的两个硬盘初始化
-//    channelogic_no++;
-//下一个channel
-/*处理每个通道上的硬盘*/
-//while (channelogic_no < channel_cnt) {
-//register_handler(channel
-//->irq_no, intr_hd_handler);
-//channelogic_no++; //下一个channel
-//}
-//
-//}
-
-
 
 /*
  * 在发送cmd指令之前执行，设置要操作的扇区：
@@ -319,7 +295,7 @@ static void identify_disk(disk_t *disk) {
     }
 
     // 读取第一个扇区
-    char *id_info = kmalloc(512);
+    char *id_info = kmalloc(SECTOR_SIZE);
     read_sector(disk->channel, id_info, 1);
 
     // 读取硬盘序列号
@@ -328,15 +304,119 @@ static void identify_disk(disk_t *disk) {
     swap_pairs_bytes(&id_info[27 * 2], disk->module, 40);
     // 读取可用扇区数
     disk->sec_cnt = *(uint32 *) &id_info[60 * 2];
-    kmfree_s(id_info, 512);
+    kmfree_s(id_info, SECTOR_SIZE);
 
-    printk("\ndisk %s info:\n", disk->name);
-    printk("    SN:      %s\n",disk->sn);
-    printk("    MODULE:  %s\n",disk->module);
-    printk("    SECTORS: %d\n", disk->sec_cnt);
-    printk("    CAPACITY:%dMB\n", disk->sec_cnt >> 11);
+    printk("\n[%s] disk %s info:\n", __FUNCTION__, disk->name);
+    printk("    SN:       %s\n", disk->sn);
+    printk("    MODULE:   %s\n", disk->module);
+    printk("    SECTORS:  %d\n", disk->sec_cnt);
+    printk("    CAPACITY: %dMB\n", disk->sec_cnt >> 11);
 }
 
+static uint8 whole_logic_idx = 0;    // 记录总的逻辑分区下标
+/*
+ * 扫描扩展分区，内部递归调用
+ */
+static void scan_ext_partitions(disk_t *disk, uint32 ext_lba_base) {
+    printk("----------- ext partition --------------\n");
+    printk("[%s] base: %d\n", __FUNCTION__, ext_lba_base);
+
+    // 扫描这块盘的分区信息
+    boot_sector_t *ebs = kmalloc(SECTOR_SIZE);
+    ide_read(disk, ext_lba_base, ebs, 1);
+    print_hex_buff((char *) ebs, SECTOR_SIZE);
+
+    for (uint8 sub_logic_idx = 0; sub_logic_idx < 4; ++sub_logic_idx) {
+        // 如果不是有效分区类型，直接读下一个分区
+        if (!ebs->tables[sub_logic_idx].fs_type) {
+            printk("[%s][%d] index %d not installed ~!\n", __FUNCTION__, ext_lba_base, sub_logic_idx);
+            continue;
+        }
+
+        // 如果是非扩展分区, 那一定是逻辑分区
+        if (ebs->tables[sub_logic_idx].fs_type != 0x5) {
+            // 逻辑分区目前约定上限存4个，再多就不存了，打印信息即可
+            if (whole_logic_idx > 3) {
+                printk("[%s][%d] index %d is logic disk %s%d: \n", __FUNCTION__, ext_lba_base, sub_logic_idx,
+                       disk->name, whole_logic_idx + LOGIC_PARTITION_BASE_IDX);
+                printk("    start_lba: %d\n", ext_lba_base + ebs->tables[sub_logic_idx].start_lba);
+                printk("    sec_cnt:   %d\n", ebs->tables[sub_logic_idx].sec_cnt);
+                whole_logic_idx++;
+                continue;
+            }
+
+            // 正常保存逻辑分区
+            partition_t *partition = &disk->logic_parts[whole_logic_idx];
+            partition->disk = disk;
+            partition->start_lba = ext_lba_base + ebs->tables[sub_logic_idx].start_lba;
+            partition->sec_cnt = ebs->tables[sub_logic_idx].sec_cnt;
+            // 逻辑分区固定从5开始, 依次递增
+            sprintfk(partition->name, "%s%d", disk->name, whole_logic_idx + LOGIC_PARTITION_BASE_IDX);
+            whole_logic_idx++;
+
+            printk("\n[%s][%d] index %d is logic disk %s:\n", __FUNCTION__, ext_lba_base, sub_logic_idx,
+                   partition->name);
+            printk("    start_lba: %d\n", partition->start_lba);
+            printk("    sec_cnt:   %d\n", partition->sec_cnt);
+
+//           chain_put_last(&partition_chain, chain_pool_getv(&partition_pool, partition));
+            continue;
+        }
+
+        // 子扩展分区，可以无限套娃，所以这里采用递归调用
+        printk("[%s][%d] index %d is sub ext partition ~\n", __FUNCTION__, ext_lba_base, sub_logic_idx);
+        scan_ext_partitions(disk, ext_lba_base + ebs->tables[sub_logic_idx].start_lba);
+    }
+
+    kmfree_s(ebs, SECTOR_SIZE);
+}
+
+
+/*
+ * 扫描硬盘disk中地址为ext_lba的扇区中的所有分区
+ */
+static void scan_partitions(disk_t *disk) {
+
+    // 读取MBR引导扇区
+    boot_sector_t *mbs = kmalloc(SECTOR_SIZE);
+    ide_read(disk, 0, mbs, 1);
+
+    printk("-----------mbs--------------\n");
+    print_hex_buff((char *) mbs, SECTOR_SIZE);
+
+    for (uint8 primary_idx = 0; primary_idx < 4; ++primary_idx) {
+        // 如果不是有效分区类型，直接读下一个分区
+        if (!mbs->tables[primary_idx].fs_type) {
+            printk("[%s] index %d not installed ~\n", __FUNCTION__, primary_idx);
+            continue;
+        }
+
+        // 如果是非扩展分区, 那一定是主分区
+        if (mbs->tables[primary_idx].fs_type != 0x5) {
+            partition_t *partition = &disk->prim_parts[primary_idx];
+            partition->disk = disk;
+            partition->start_lba = mbs->tables[primary_idx].start_lba;
+            partition->sec_cnt = mbs->tables[primary_idx].sec_cnt;
+            sprintfk(partition->name, "%s%d", disk->name, primary_idx + PRIMARY_PARTITION_BASE_IDX);
+
+            printk("\n[%s] index %d is primary disk %s:\n", __FUNCTION__, primary_idx, partition->name);
+            printk("    start_lba: %d\n", partition->start_lba);
+            printk("    sec_cnt:   %d\n", partition->sec_cnt);
+
+            // 把分区加到链表中
+//            chain_put_last(&partition_chain, chain_pool_getv(&partition_pool, partition));
+            continue;
+        }
+
+        /* 这里一定是总扩展分区 */
+        printk("[%s] index %d is total ext partition ~\n", __FUNCTION__, primary_idx);
+
+        // 传入扩展分区的起始lba地址, 后面所有的扩展分区地址都相对于此
+        scan_ext_partitions(disk, mbs->tables[primary_idx].start_lba);
+    }
+
+    kmfree(mbs);
+}
 
 /*
  * Linux的硬盘命名规则是[x]d[y][n], 其中只有字母d是固定的，其他带中括号的字符都是多选值：
@@ -351,7 +431,15 @@ static void identify_disk(disk_t *disk) {
  *      这里统一用SCSI硬盘的命名规则来命名虚拟硬盘。
  */
 void ide_init() {
+    // 初始化硬盘数和通道数
     hd_count_init();
+
+    // 初始化分区链表与缓存池
+//    chain_init(&partition_chain);
+//    partition_pool.addr = alloc_kernel_page();
+//    partition_pool.size = PAGE_SIZE;
+//    chain_pool_init(&partition_pool);
+
     // 初始化primary通道和secondary通道
     for (int cno = 0; cno < channel_cnt; ++cno) {
         ide_channel_t *channel = &channels[cno];
@@ -374,100 +462,17 @@ void ide_init() {
             // 0为主盘(master)，1为从盘(slave)
             disk->no = dno;
             disk->channel = channel;
-            // 次通道: 从盘为sdd, 主盘为sdc， 主通道: 从盘为sdb, 主盘为sda
-//            strcpy(disk->name, cno ? (dno ? "sdd" : "sdc") : (dno ? "sdb" : "sda"));
+            // 主通道主从盘，次通道主从盘，依次为 sd[a~d]
             sprintfk(disk->name, "sd%c", 'a' + cno * 2 + dno);
 
-            // 获取硬盘参数及分区信息
+            // 获取硬盘基本参数
             identify_disk(disk);
 
+            // 获取硬盘分区信息（主通道的主盘作为操作系统盘，不设分区）
+            if (cno != 0 || dno != 0) scan_partitions(disk);
         }
     }
 }
-
-
-
-uint32 ext_lba_base = 0;            // 用于记录总扩展分区的起始lba, 初始为0, partition_scan时以此为标记
-uint8 primary_no = 0, logic_no = 0; // 用来记录硬盘主分区和逻辑分区的下标
-chain_t partition_list;             // 分区队列
-
-/*
- * 扫描硬盘disk中地址为ext_lba的扇区中的所有分区
- */
-static void partition_scan(disk_t *disk, uint32 ext_lba) {
-
-    // 读取引导扇区
-    boot_sector_t *bs = kmalloc(sizeof(boot_sector_t));
-    ide_read(disk, ext_lba, bs, 1);
-
-    partition_table_entry_t *p = bs->tables;
-
-    // 读取分区表的4个分区表项
-    for (uint8 part_idx = 0; part_idx < 4; ++part_idx) {
-        // 如果不是有效分区类型，直接读下一个分区
-        if (!p->fs_type) {
-            p++;
-            continue;
-        }
-
-        // 如果是非扩展分区
-        if (p->fs_type != 0x5) {
-            // 如果还没读到扩展分区，那一定是主分区
-            if (ext_lba) {
-                disk->prim_parts[primary_no].start_lba = p->start_lba;
-                disk->prim_parts[primary_no].sec_cnt = p->sec_cnt;
-                disk->prim_parts[primary_no].disk = disk;
-                chain_put_last(&partition_list, &disk->prim_parts[primary_no].part_tag);
-                primary_no++;
-                p++;
-                continue;
-            }
-
-            // 不是主分区，那就是逻辑分区
-            disk->logic_parts[logic_no].start_lba = ext_lba + p->start_lba;
-            disk->logic_parts[logic_no].sec_cnt = p->sec_cnt;
-            disk->logic_parts[logic_no].disk = disk;
-            chain_put_last(&partition_list, &disk->logic_parts[logic_no].part_tag);
-
-            // 逻辑分区数字从5开始，主分区是1~4
-            sprintfk(disk->logic_parts[logic_no].name, "%s%d", disk->name, logic_no + 5);
-            logic_no++;
-
-            p++;
-            continue;
-        }
-
-        /* 扩展分区 */
-
-        // 如果是首次读取到扩展分区, 即MBR所在的扇区
-        if (!ext_lba_base) {
-            // 记录扩展分区的起始lba地址, 后面所有的扩展分区地址都相对于此
-            ext_lba_base = p->start_lba;
-            // 扫描这块盘的分区信息
-            partition_scan(disk, p->start_lba);
-
-            p++;
-            continue;
-        }
-
-        // 非首次读取扩展扇区, 即EBR所在的扇区
-        partition_scan(disk, p->start_lba + ext_lba_base);
-        p++;
-    }
-    kmfree(bs);
-}
-
-//
-///*打印分区信息*/
-//static bool partition_info( chain_elem_t *pelem,int arg UNUSED) {
-//    struct partition *part = elem2entry(
-//    struct partition, part_tag, pelem);
-//    printk("%s start_lba:0x%x,sec_cnt:0x%x\n", \
-//part->name, part->start_lba, part->sec_cnt);
-///*在此处return false与函数本身功能无关，
-//*只是为了让主调函数list_traversal继续向下遍历元素*/
-//    return false;
-//}
 
 /*
  * 硬盘中断处理程序
@@ -490,29 +495,3 @@ void hd_interrupt_handler(uint8 vector_no) {
 disk_t *get_disk(uint8 channel_no, uint8 disk_no) {
     return &channels[channel_no].disks[disk_no];
 }
-
-
-// =======================================================
-// ===============以下用于测试===========================
-// =======================================================
-
-//#define TEST_READ_SEC_CNT 4
-//char buff[TEST_READ_SEC_CNT << 9] = {0};
-//
-//void test_read_disk() {
-//    ide_read(&channels[0].disks[0], 0, buff, TEST_READ_SEC_CNT);
-////    select_sector(&channels[0].disks[0], 0, TEST_READ_SEC_CNT);
-////    cmd_out(&channels[0], CMD_READ_SECTOR);
-//}
-//
-//
-//void hd_interrupt_handler1() {
-//    read_sector(&channels[0].disks[0], buff, TEST_READ_SEC_CNT);
-//    uint32 size = TEST_READ_SEC_CNT << 9;
-//    for (int i = 0; i < size; ++i) {
-//        if (i % 16 == 0) printk("\n");
-//        printk("%02x ", buff[i] & 0xff);
-//    }
-//    printk("\nhd_interrupt_handler end~ \n");
-//}
-//

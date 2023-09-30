@@ -57,24 +57,32 @@ mkdir:
 	$(shell mkdir -p $(BUILD)/$(BRIDGE))
 	$(foreach v, $(KERNEL_DIRS), $(shell mkdir -p $(BUILD)/$(v)))
 
-hd0:
+hd0: # 操作系统盘每次安装都重建
 	$(shell rm -f $(BUILD_HD_IMG))
 	# 创建硬盘镜像文件，-hd指定镜像大小，单位MB，关于该指令可参考 READ_bximage.md
 	bximage -q -hd=$(word 1, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD_IMG)
 
-hd1:
-	$(shell rm -f $(BUILD_HD1_IMG))
-	bximage -q -hd=$(word 2, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD1_IMG)
+hd1: # 常规磁盘如果不存在再新建
+	if [ -e  $(word 2, $(HD_IMG_SIZES)) ]; then \
+	  	bximage -q -hd=$(word 2, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD1_IMG); \
+  	fi
 
 hd2:
-	$(shell rm -f $(BUILD_HD2_IMG))
-	bximage -q -hd=$(word 3, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD2_IMG)
+	if [ -e  $(word 3, $(HD_IMG_SIZES)) ]; then \
+	  	bximage -q -hd=$(word 3, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD2_IMG); \
+  	fi
 
 hd3:
-	$(shell rm -f $(BUILD_HD3_IMG))
-	bximage -q -hd=$(word 4, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD3_IMG)
+	if [ -e  $(word 4, $(HD_IMG_SIZES)) ]; then \
+	  	bximage -q -hd=$(word 4, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD3_IMG); \
+  	fi
 
 hd_ex: hd1 hd2 hd3
+
+hd_ex_clean:
+	$(shell rm -f $(BUILD_HD1_IMG))
+	$(shell rm -f $(BUILD_HD2_IMG))
+	$(shell rm -f $(BUILD_HD3_IMG))
 
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@

@@ -13,7 +13,7 @@
 typedef struct semaphore_t {
     uint8 value;        // 信号量值，即剩余可分配资源的个数
     chain_t waiters;    // 等待队列
-} semaphore_t;
+} __attribute__((packed)) semaphore_t;
 
 
 /* 基于信号量的锁 */
@@ -21,7 +21,7 @@ typedef struct lock_t {
     task_t *holder;    // 锁的持有者（只有多任务可能用到锁）
     semaphore_t sema;  // 用二元信号量实现锁
     uint32 repeat;     // 锁的持有者重复申请锁的次数
-} lock_t;
+} __attribute__((packed)) lock_t;
 
 void sema_init(semaphore_t* sema, uint8 init_value);
 void sema_down(semaphore_t* sema);
