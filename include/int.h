@@ -13,6 +13,8 @@ void interrupt_handler_exception(int vector_no, int edi, int esi, int ebp, int e
                                  int err_code, int eip, int cs, int eflags, int esp_r3, int ss_r3);
 bool interrupt_has_error_code(int vector_no);
 
+void send_eoi(int idt_index);
+
 void keyboard_interrupt_handler();
 void clock_interrupt_handler();
 

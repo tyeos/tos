@@ -128,7 +128,7 @@ void console_clear() {
     move_cursor();
     move_screen();
     uint16 *ptr = (uint16 *) MEM_BASE;
-    while (ptr < MEM_END) {
+    while ((uint32) ptr < MEM_END) {
         *ptr++ = CHARACTER_SPACE;
     }
 }
@@ -193,7 +193,7 @@ void scroll_down_page() {
 }
 
 // 屏幕往上翻阅多行（无条件上翻，仅控制屏幕，判断边界）
- int scroll_up_rows(int rows) {
+int scroll_up_rows(int rows) {
     if (rows > 0 && cursor >= screen + SCR_SIZE + (rows - 1) * ROW_SIZE &&
         screen + ROW_SIZE * rows <= MEM_END - SCR_SIZE) {
         screen += ROW_SIZE * rows;
@@ -209,7 +209,7 @@ void scroll_down_page() {
 }
 
 // 屏幕往下翻阅多行（无条件下翻，仅控制屏幕，判断边界）
- int scroll_down_rows(int rows) {
+int scroll_down_rows(int rows) {
     if (screen - ROW_SIZE * rows >= MEM_BASE) {
         screen -= ROW_SIZE * rows;
         move_screen();

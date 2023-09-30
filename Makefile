@@ -74,7 +74,7 @@ hd3:
 	$(shell rm -f $(BUILD_HD3_IMG))
 	bximage -q -hd=$(word 4, $(HD_IMG_SIZES)) -func=create -sectsize=512 -imgmode=flat $(BUILD_HD3_IMG)
 
-hd_ex: mkdir hd1 hd2 hd3
+hd_ex: hd1 hd2 hd3
 
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@
@@ -100,7 +100,7 @@ kernel: $(BUILD_BRIDGE_O_FILES) $(BUILD_KERNEL_O_FILES)
 
 build: mkdir $(BUILD_BOOT_O_FILES) kernel
 
-all: hd_ex hd0 build
+all: build hd0 hd_ex
 	# dd是转换和复制文件的命令：
 	# 	  if为源文件，of为输出文件，bs为块大小，count为复制块的数量,
 	# 	  seek表示跳过几个块开始写(针对目标文件), skip为跳过几个块开始读(针对源文件),
@@ -109,8 +109,8 @@ all: hd_ex hd0 build
 	dd if=$(word 1, $(BUILD_BOOT_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=0 count=1 conv=notrunc
 	# 给loader分配4个扇区
 	dd if=$(word 2, $(BUILD_BOOT_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=1 count=4 conv=notrunc
-	# 给system分配60个扇区
-	dd if=$(BUILD_KERNEL_BIN) of=$(BUILD_HD_IMG) bs=512 seek=5 count=60 conv=notrunc
+	# 给system分配100个扇区
+	dd if=$(BUILD_KERNEL_BIN) of=$(BUILD_HD_IMG) bs=512 seek=5 count=100 conv=notrunc
 
 bochs: all
 	$(shell rm -f $(BUILD)/hd.img.lock)

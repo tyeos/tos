@@ -43,6 +43,7 @@ void sema_down(semaphore_t *sema) {
         // 阻塞当前任务
         current_task->state = TASK_BLOCKED; // 将当前任务设为阻塞态
         check_recover_if(iflag);            // 恢复中断
+        if (!iflag) printk("[%s] check logic!\n", __FUNCTION__); // 在不允许中断的地方申请信号量
         HLT                                 // 释放当前任务控制权
 
         // 信号量被释放，当前任务重新被唤醒，进入运行态

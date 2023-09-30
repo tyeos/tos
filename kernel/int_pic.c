@@ -17,7 +17,7 @@
 #define PIC_EOI     0x20    // 通知中断控制器中断结束
 
 // 由于ICW4的AEOI位已设为1，即自动结束中断(Auto End Of Interrupt)，所以不用再单独发送EOI，即此方法可以不使用
-static void send_eoi(int idt_index) {
+void send_eoi(int idt_index) {
     if (idt_index >= 0x20 && idt_index < 0x30) { // 由8259A芯片触发
         outb(PIC_M_CTRL, PIC_EOI);
         if (idt_index >= 0x28) { // 由8259A从片触发

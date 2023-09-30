@@ -13,25 +13,46 @@
 #include "../include/ide.h"
 
 
-#define TEST_READ_SEC_CNT 2
-char buff[TEST_READ_SEC_CNT << 9] = {0};
-
-
 /* 模拟内核任务A */
 void *kernel_task_a(void *args) {
+    printk("K_A start~\n");
 
-    ide_read(get_disk(0, 0), 0, buff, TEST_READ_SEC_CNT);
-    for (int i = 0; i < TEST_READ_SEC_CNT << 9; ++i) {
-        if (i % 16 == 0) printk("\n");
-        printk("%02x ", buff[i] & 0xff);
+    const uint32 page_count = 2;
+    uint32 *pages[page_count];
+    for (int i = 0; i < page_count; ++i) {
+        pages[i] = alloc_kernel_page();
+        if (i > 0 && (uint32) pages[i] != (uint32) pages[i - 1] + PAGE_SIZE) {
+            printk("Discontinuous address !");
+            STOP
+        }
     }
-    printk("\ntest ide read end~ \n");
+    int sec_cnt = page_count * 8; // 一页8个扇区
+    char *buff = (char *) pages[0];
+
+    // 测试读盘
+    printk("test ide read start ~ \n");
+    ide_read(get_disk(0, 0), 0, buff, sec_cnt);
+    print_hex_buff(buff, (sec_cnt > 3 ? 3 : sec_cnt) << 9);
+    printk("test ide read end ~ \n");
+
+    // 测试写盘
+    printk("test ide write start ~~ \n");
+    ide_write(get_disk(0, 1), 0, buff, sec_cnt);
+    printk("test ide write end ~~ \n");
+
+    // 测试读基本信息
 
 
-    for (int i = 0; i < 10; ++i) {
-        printk("K_A ~ %d\n", i);
-        HLT
+//    for (int i = 0; i < 10; ++i) {
+//        printk("K_A ~ %d\n", i);
+//        HLT
+//    }
+    printk("K_A end~\n");
+    SLEEP(100)
+    for (int i = 0; i < page_count; ++i) {
+        free_kernel_page(pages[i]);
     }
+
     return NULL;
 }
 
