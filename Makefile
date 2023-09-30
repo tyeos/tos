@@ -81,6 +81,9 @@ hd3:
 
 hdx: hd1 hd2 hd3
 
+read_hex:
+	xxd -a -u -g 1 -s 0x0 -l 512 $(BUILD_HD_IMG)
+
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@
 
