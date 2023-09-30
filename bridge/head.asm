@@ -262,7 +262,7 @@ _start:
 
 .init_8259a_OCW1_slave:
 ;    mov al, 11111111b ; 从片屏蔽所有中断
-    mov al, 10111111b ; 从片打开硬盘中断
+    mov al, 00111111b ; 从片打开硬盘主通道和次通道中断
     out 0A1h, al
 
 .enter_c:

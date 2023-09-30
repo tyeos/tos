@@ -5,6 +5,7 @@
 #include "../include/bitmap.h"
 #include "../include/string.h"
 #include "../include/print.h"
+#include "../include/mm.h"
 
 uint32 bitmap_init(bitmap_t *bitmap) {
     uint32 bytes = (bitmap->total + 7) >> 3; // 1个字节可以表示8个物理页的使用情况
@@ -35,7 +36,8 @@ int bitmap_alloc(bitmap_t *bitmap) {
         bitmap->map[index] |= (1 << cursor % 8); // 尚未分配, 可用
         bitmap->used++; // 进行分配
         bitmap->cursor = cursor + 1;
-        printk("[%s] %p [%d] 0x%x: [0x%X]\n", __FUNCTION__, bitmap, cursor % 8, index, bitmap->map[index]);
+        if (OPEN_MEMORY_LOG)
+            printk("[%s] %p [%d] 0x%x: [0x%X]\n", __FUNCTION__, bitmap, cursor % 8, index, bitmap->map[index]);
         return (int) cursor;
     }
     return ERR_IDX; // 前面已经进行空间预测, 逻辑不会走到这里
@@ -51,7 +53,8 @@ int bitmap_free(bitmap_t *bitmap, uint32 cursor) {
     if (bitmap->map[index] & (1 << cursor % 8)) { // 可回收
         bitmap->map[index] &= ~(1 << cursor % 8);
         bitmap->used--;
-        printk("[%s] %p [%d] 0x%x: [0x%X]\n", __FUNCTION__, bitmap, cursor % 8, index, bitmap->map[index]);
+        if (OPEN_MEMORY_LOG)
+            printk("[%s] %p [%d] 0x%x: [0x%X]\n", __FUNCTION__, bitmap, cursor % 8, index, bitmap->map[index]);
         return (int32) cursor;
     }
 

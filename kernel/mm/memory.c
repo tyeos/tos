@@ -79,7 +79,8 @@ void *alloc_physical_page() {
         return NULL;
     }
     void *p = (void *) (g_physical_memory.addr_start + (idx << 12));
-    printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.bitmap.total);
+    if (OPEN_MEMORY_LOG)
+        printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.bitmap.total);
     return p;
 }
 
@@ -91,5 +92,6 @@ void free_physical_page(void *p) {
     }
 
     bitmap_free(&g_physical_memory.bitmap, (uint32) (p - g_physical_memory.addr_start) >> 12);
-    printk("[%s] free page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.bitmap.used);
+    if (OPEN_MEMORY_LOG)
+        printk("[%s] free page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.bitmap.used);
 }

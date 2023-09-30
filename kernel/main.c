@@ -20,7 +20,6 @@ void kernel_main(void) {
     clock_init();
     syscall_init();
     task_init();
-    ide_init();
     STI
 
     while (true) {

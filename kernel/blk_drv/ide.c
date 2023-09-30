@@ -74,52 +74,6 @@ static void hd_count_init() {
     printk("ide: hd_cnt = %d \n", hd_cnt);
 }
 
-/*
- * Linux的硬盘命名规则是[x]d[y][n], 其中只有字母d是固定的，其他带中括号的字符都是多选值：
- *      x表示硬盘分类，硬盘有两大类，IDE磁盘和SCSI磁盘。h代表IDE磁盘，s代表SCSI磁盘，故x取值为h和s。
- *      d表示disk, 即磁盘。
- *      y表示设备号，以区分第几个设备，取值范围是小写字符，其中a是第1个硬盘，b是第2个硬盘，依次类推。
- *      n表示分区号，也就是一个硬盘上的第几个分区。分区以数字1开始，依次类推。
- *
- * 综上所述：
- *      sda表示第1个SCSI硬盘，hdc表示第3个IDE硬盘，
- *      sda1表示第1个SCSI硬盘的第个分区，hdc3表示第3个IDE硬盘的第3个分区。
- *      这里统一用SCSI硬盘的命名规则来命名虚拟硬盘。
- */
-void ide_init() {
-    hd_count_init();
-    // 初始化primary通道和secondary通道
-    for (int cno = 0; cno < channel_cnt; ++cno) {
-        ide_channel_t *channel = &channels[cno];
-        // 1为次通道, 0为主通道
-        strcpy(channel->name, cno ? "ide1" : "ide0");
-        // 次通道寄存器端口基址0x170, 主通道0x1f0
-        channel->base_port = cno ? 0x170 : 0x1f0;
-        // 次通道走8259A从片最后一个中断引脚, 主通道走8259A从片倒数第二个中断引脚
-        channel->int_no = 0x20 + (cno ? 15 : 14);
-        channel->waiting = false;
-        lock_init(&channel->lock);
-        // 信号量初始为0，即硬盘驱动发送硬盘操作指令后，获取信号量即进入阻塞，直到硬盘完成后发送中断给一个信号量将其唤醒
-        sema_init(&channel->disk_done, 0);
-
-        // 初始化该通道上的硬盘
-        uint8 cnt = hd_cnt <= 2 ? hd_cnt : (cno ? hd_cnt - 2 : 2); // 本通道上的硬盘数
-
-        for (uint8 dno = 0; dno < cnt; ++dno) {
-            disk_t *disk = &channel->disks[dno];
-            // 0为主盘(master)，1为从盘(slave)
-            disk->no = dno;
-            disk->channel = channel;
-            // 次通道: 从盘为sdd, 主盘为sdc， 主通道: 从盘为sdb, 主盘为sda
-            strcpy(disk->name, cno ? (dno ? "sdd" : "sdc") : (dno ? "sdb" : "sda"));
-
-            // 获取硬盘参数及分区信息
-
-
-        }
-    }
-}
-
 //
 //    /*分别获取两个硬盘的参数及分区信息*/
 //    while(dev_no<2){
@@ -316,8 +270,9 @@ void ide_write(struct disk_t *disk, uint32 lba, void *buf, uint32 sec_cnt) {
 
 /*
  * 将dst中len个相邻字节交换位置后存入buf,
- * 此函数用来处理identify命令的返回信息，硬盘参数信息是以字为单位的，包括偏移、长度的单位都是字，
- * 在这16位的字中，相邻字符的位置是互换的，所以通过此函数做转换。
+ *      此函数用来处理identify命令的返回信息，硬盘参数信息是以字为单位的，包括偏移、长度的单位都是字，
+ *      在这16位的字中，相邻字符的位置是互换的，所以通过此函数做转换。
+ * 注：该函数会在最后补一个字符串结束符
  */
 static void swap_pairs_bytes(const char *dst, char *buf, uint32 len) {
     uint32 idx;
@@ -326,7 +281,7 @@ static void swap_pairs_bytes(const char *dst, char *buf, uint32 len) {
         buf[idx + 1] = *dst++;
         buf[idx] = *dst++;
     }
-    buf[idx] = '\0';
+    buf[idx] = EOS;
 }
 
 
@@ -345,39 +300,92 @@ static void swap_pairs_bytes(const char *dst, char *buf, uint32 len) {
  * ------------------------------------------------------------------------------------
  */
 static void identify_disk(disk_t *disk) {
-    // 先选择要操作的盘
-    // device寄存器, 参考 loader.asm 中 Device寄存器结构
-    // 第5和7位固定为1，第6位MOD=1(LBA), 第4位DEV=0/1(主盘/从盘), 第0~3位为lba地址的24~27位
+    /*
+     * device寄存器, 参考 loader.asm 中 Device寄存器结构
+     * 第5和7位固定为1，第6位MOD=1(LBA), 第4位DEV=0/1(主盘/从盘), 第0~3位为lba地址的24~27位
+     */
     outb(reg_dev(disk->channel), (disk->no ? 0b11110000 : 0b11100000));
+
     // 发送硬盘检测指令
     cmd_out(disk->channel, CMD_IDENTIFY);
 
     // 等待信号量
     sema_down(&disk->channel->disk_done);
 
-    // 已等到信号
-    if (!busy_wait(disk)) {
+    // 已等到信号，先立即检测一次，如果硬盘没准备好，则等待硬盘，直至超时
+    if (!check_status(disk->channel) && !busy_wait(disk)) {
         printk("[%s] disk busy!\n", __FUNCTION__);
         STOP
     }
 
     // 读取第一个扇区
-    char id_info[512];
+    char *id_info = kmalloc(512);
     read_sector(disk->channel, id_info, 1);
 
-    char buf[64];
     // 读取硬盘序列号
-    swap_pairs_bytes(&id_info[10 * 2], buf, 20);
-    printk("disk %s info:\n SN:%s\n", disk->name, buf);
-    memset(buf, 0, sizeof(buf));
+    swap_pairs_bytes(&id_info[10 * 2], disk->sn, 20);
     // 读取硬盘型号
-    swap_pairs_bytes(&id_info[27 * 2], buf, 40);
-    printk("MODULE:%s\n", buf);
+    swap_pairs_bytes(&id_info[27 * 2], disk->module, 40);
     // 读取可用扇区数
-    uint32 sectors = *(uint32 *) &id_info[60 * 2];
-    printk("    SECTORS:%d\n", sectors);
-    printk("    CAPACITY:%dMB\n", sectors * 512 / 1024 / 1024);
+    disk->sec_cnt = *(uint32 *) &id_info[60 * 2];
+    kmfree_s(id_info, 512);
+
+    printk("\ndisk %s info:\n", disk->name);
+    printk("    SN:      %s\n",disk->sn);
+    printk("    MODULE:  %s\n",disk->module);
+    printk("    SECTORS: %d\n", disk->sec_cnt);
+    printk("    CAPACITY:%dMB\n", disk->sec_cnt >> 11);
 }
+
+
+/*
+ * Linux的硬盘命名规则是[x]d[y][n], 其中只有字母d是固定的，其他带中括号的字符都是多选值：
+ *      x表示硬盘分类，硬盘有两大类，IDE磁盘和SCSI磁盘。h代表IDE磁盘，s代表SCSI磁盘，故x取值为h和s。
+ *      d表示disk, 即磁盘。
+ *      y表示设备号，以区分第几个设备，取值范围是小写字符，其中a是第1个硬盘，b是第2个硬盘，依次类推。
+ *      n表示分区号，也就是一个硬盘上的第几个分区。分区以数字1开始，依次类推。
+ *
+ * 综上所述：
+ *      sda表示第1个SCSI硬盘，hdc表示第3个IDE硬盘，
+ *      sda1表示第1个SCSI硬盘的第个分区，hdc3表示第3个IDE硬盘的第3个分区。
+ *      这里统一用SCSI硬盘的命名规则来命名虚拟硬盘。
+ */
+void ide_init() {
+    hd_count_init();
+    // 初始化primary通道和secondary通道
+    for (int cno = 0; cno < channel_cnt; ++cno) {
+        ide_channel_t *channel = &channels[cno];
+        // 1为次通道, 0为主通道
+        strcpy(channel->name, cno ? "ide1" : "ide0");
+        // 次通道寄存器端口基址0x170, 主通道0x1f0
+        channel->base_port = cno ? 0x170 : 0x1f0;
+        // 次通道走8259A从片最后一个中断引脚, 主通道走8259A从片倒数第二个中断引脚
+        channel->int_no = 0x20 + (cno ? 15 : 14);
+        channel->waiting = false;
+        lock_init(&channel->lock);
+        // 信号量初始为0，即硬盘驱动发送硬盘操作指令后，获取信号量即进入阻塞，直到硬盘完成后发送中断给一个信号量将其唤醒
+        sema_init(&channel->disk_done, 0);
+
+        // 初始化该通道上的硬盘
+        uint8 cnt = hd_cnt <= 2 ? hd_cnt : (cno ? hd_cnt - 2 : 2); // 本通道上的硬盘数
+
+        for (uint8 dno = 0; dno < cnt; ++dno) {
+            disk_t *disk = &channel->disks[dno];
+            // 0为主盘(master)，1为从盘(slave)
+            disk->no = dno;
+            disk->channel = channel;
+            // 次通道: 从盘为sdd, 主盘为sdc， 主通道: 从盘为sdb, 主盘为sda
+//            strcpy(disk->name, cno ? (dno ? "sdd" : "sdc") : (dno ? "sdb" : "sda"));
+            sprintfk(disk->name, "sd%c", 'a' + cno * 2 + dno);
+
+            // 获取硬盘参数及分区信息
+            identify_disk(disk);
+
+        }
+    }
+}
+
+
 
 uint32 ext_lba_base = 0;            // 用于记录总扩展分区的起始lba, 初始为0, partition_scan时以此为标记
 uint8 primary_no = 0, logic_no = 0; // 用来记录硬盘主分区和逻辑分区的下标

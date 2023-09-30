@@ -46,10 +46,15 @@ typedef struct partition_t {
 typedef struct disk_t {
     struct ide_channel_t *channel;  // 属于哪个IDE通道
     uint8 no;                       // 硬盘号，主盘为0，从盘为1
-    char name[8];                   // 本硬盘的名称，如sda，sdb
+    char name[4];                   // 本硬盘的名称，sd[a~d]
+
+    char sn[21];                    // 硬盘序列号
+    char module[41];                // 硬盘型号
+    uint32 sec_cnt;                 // 可用扇区数
 
     partition_t prim_parts[4];      // 主分区，最多4个
     partition_t logic_parts[4];     // 逻辑分区，可以多个，这里设置上限4个
+
 } __attribute__((unused)) disk_t;
 
 /* IDE(/ATA)通道结构 */
@@ -84,6 +89,8 @@ typedef struct boot_sector_t {
     partition_table_entry_t tables[4];  // 分区表项，共64字节
     uint16 signature;                   // 启动扇区的结束标志: 0x55, 0xAA
 } __attribute__((unused)) boot_sector_t;
+
+void ide_init();
 
 disk_t *get_disk(uint8 channel_no, uint8 disk_no);
 void ide_read(struct disk_t *disk, uint32 lba, void *buf, uint32 sec_cnt);

@@ -8,6 +8,8 @@
 #include "types.h"
 #include "bitmap.h"
 
+#define OPEN_MEMORY_LOG false // 是否打开内存调试日志
+
 #define PAGE_SIZE 4096
 
 typedef struct {

@@ -207,18 +207,20 @@ interrupt_gate idt[IDT_SIZE] = {0};
 */
 dt_ptr idt_ptr;
 
-extern uint interrupt_handler_table[0x2f];   // 地址在汇编中定义
+extern uint interrupt_handler_table[0x30];   // 地址在汇编中定义
 extern void interrupt_handler_clock();       // 时钟中断函数，汇编中定义
-extern void interrupt_handler_hd();          // 硬盘中断函数，汇编中定义
+extern void interrupt_handler_hd_primary();  // 硬盘主通道中断函数，汇编中定义
+extern void interrupt_handler_hd_secondary();// 硬盘次通道中断函数，汇编中定义
 extern void interrupt_handler_system_call(); // 系统调用函数，汇编中定义
 
 void idt_init() {
     for (int i = 0; i < IDT_SIZE; ++i) {
         interrupt_gate *p = &idt[i];
 
-        uint handler = interrupt_handler_table[i];
+        uint handler = i < 0x30 ? interrupt_handler_table[i] : 0;
         if (i == 0x20) handler = (uint) interrupt_handler_clock;
-        if (i == 0x2E) handler = (uint) interrupt_handler_hd;
+        if (i == 0x2E) handler = (uint) interrupt_handler_hd_primary;
+        if (i == 0x2F) handler = (uint) interrupt_handler_hd_secondary;
         if (i == 0x80) handler = (uint) interrupt_handler_system_call;
 
         p->offset0 = handler & 0xffff;

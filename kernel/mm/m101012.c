@@ -189,7 +189,7 @@ static uint16 kernel_pde_counter[0x100] = {0}; // 记录每个页目录表项已
 /*
  * 当前任务，从中获取用户虚拟内存池，随着用户进程的切换，对应也会发生变更
  */
-extern task_t * current_task;
+extern task_t *current_task;
 
 
 /*
@@ -560,8 +560,8 @@ static void *_alloc_virtual_page(enum pool_flags pf) {
         return NULL;
     }
 
-    void *p = (void *) (mp->addr_start + ((uint32)idx << 12));
-    printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, mp->bitmap.total);
+    void *p = (void *) (mp->addr_start + ((uint32) idx << 12));
+    if (OPEN_MEMORY_LOG) printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, mp->bitmap.total);
     return p;
 }
 
@@ -581,7 +581,7 @@ static void _free_virtual_page(enum pool_flags pf, void *p) {
     }
 
     bitmap_free(&mp->bitmap, (uint32) (p - mp->addr_start) >> 12);
-    printk("[%s] free page: 0x%X, used: %d pages\n", __FUNCTION__, p, mp->bitmap.used);
+    if (OPEN_MEMORY_LOG) printk("[%s] free page: 0x%X, used: %d pages\n", __FUNCTION__, p, mp->bitmap.used);
 }
 
 
@@ -607,7 +607,7 @@ static void *alloc_virtual_page(enum pool_flags pf, void *binding_physical_page)
         // 获取页表的访问指针
         void *pt_vaddr = get_pt_vaddr(pde_index);
         memset(pt_vaddr, 0, PAGE_SIZE); // 将页清空
-        printk("[%s] create pde [0x%x -> 0x%x]\n", __FUNCTION__, pde_index, paddr);
+        if (OPEN_MEMORY_LOG) printk("[%s] create pde [0x%x -> 0x%x]\n", __FUNCTION__, pde_index, paddr);
     }
     // 获取访问页表项的指针
     uint32 *pte_vaddr = get_pte_vaddr(virtual_page);
@@ -615,13 +615,15 @@ static void *alloc_virtual_page(enum pool_flags pf, void *binding_physical_page)
     if (pf == PF_KERNEL) {
         *pte_vaddr = (uint32) binding_physical_page | 0b011; // 页属性，US=Supervisor, RW=1, P=1
         kernel_pde_counter[pde_index - 0x300]++;
-        printk("[%s] bound [0x%x -> 0x%x], pte total %d\n", __FUNCTION__, virtual_page, binding_physical_page,
-               kernel_pde_counter[pde_index - 0x300]);
+        if (OPEN_MEMORY_LOG)
+            printk("[%s] bound [0x%x -> 0x%x], pte total %d\n", __FUNCTION__, virtual_page, binding_physical_page,
+                   kernel_pde_counter[pde_index - 0x300]);
     } else {
         *pte_vaddr = (uint32) binding_physical_page | 0b111; // 页属性，US=User, RW=1, P=1
         current_task->user_vaddr_alloc.pde_counter[pde_index]++;
-        printk("[%s] bound [0x%x -> 0x%x], pte total %d\n", __FUNCTION__, virtual_page, binding_physical_page,
-               current_task->user_vaddr_alloc.pde_counter[pde_index]);
+        if (OPEN_MEMORY_LOG)
+            printk("[%s] bound [0x%x -> 0x%x], pte total %d\n", __FUNCTION__, virtual_page, binding_physical_page,
+                   current_task->user_vaddr_alloc.pde_counter[pde_index]);
     }
 
     return virtual_page;
@@ -661,13 +663,14 @@ static void *free_virtual_page(enum pool_flags pf, void *virtual_page) {
         *pde_vaddr = 0;
         // 释放页表地址
         free_physical_page((void *) paddr);
-        printk("[%s] free pde [0x%x -> 0x%x]\n", __FUNCTION__, pde_index, paddr);
+        if (OPEN_MEMORY_LOG) printk("[%s] free pde [0x%x -> 0x%x]\n", __FUNCTION__, pde_index, paddr);
     }
 
     // 释放虚拟地址
     _free_virtual_page(pf, virtual_page);
-    printk("[%s] unbound [0x%x -> 0x%x], pte rest %d\n", __FUNCTION__, virtual_page, unbinding_physical_page,
-           pde_counter[pde_counter_index]);
+    if (OPEN_MEMORY_LOG)
+        printk("[%s] unbound [0x%x -> 0x%x], pte rest %d\n", __FUNCTION__, virtual_page, unbinding_physical_page,
+               pde_counter[pde_counter_index]);
     return unbinding_physical_page;
 }
 
@@ -678,8 +681,8 @@ static void *free_virtual_page(enum pool_flags pf, void *virtual_page) {
 void process_destroy(task_t *task) {
     if (!task->pgdir) return; // 非用户进程无需处理
 
-    printk("\n===============================================================================\n");
-    printk("--------------- free all user(%d) page begin ---------------\n", task->pid);
+    if (OPEN_MEMORY_LOG) printk("\n===============================================================================\n");
+    if (OPEN_MEMORY_LOG) printk("--------------- free all user(%d) page begin ---------------\n", task->pid);
     // 检查所有页表（第0个页表除外）
     void *physical_page;
     for (uint32 i = 1; i < 0x300; ++i) {
@@ -690,18 +693,18 @@ void process_destroy(task_t *task) {
             physical_page = free_virtual_page(PF_USER, (void *) ((i << 22) | (j << 10))); // 如果是最后一个页表项会自动释放页表
             if (!physical_page) continue; // 该页表项未挂物理页
             free_physical_page(physical_page);
-            printk("--------------------\n");
+            if (OPEN_MEMORY_LOG) printk("--------------------\n");
             if (!current_task->user_vaddr_alloc.pde_counter[i]) break; // 该页表所关联的物理页已全部释放
         }
     }
-    printk("--------------- free all user(%d) page end -----------------\n", task->pid);
-    printk("===============================================================================\n\n");
+    if (OPEN_MEMORY_LOG) printk("--------------- free all user(%d) page end -----------------\n", task->pid);
+    if (OPEN_MEMORY_LOG) printk("===============================================================================\n\n");
 }
 
 
 // 分配虚拟页, 并自动挂载物理页
 static void *_alloc_page(enum pool_flags pf) {
-    printk("\n------------------------- alloc page begin ------------------------------\n");
+    if (OPEN_MEMORY_LOG) printk("\n------------------------- alloc page begin ------------------------------\n");
     // 申请物理页
     void *p = (void *) alloc_physical_page();
     if (!p) {
@@ -713,13 +716,13 @@ static void *_alloc_page(enum pool_flags pf) {
         free_physical_page(p);
         return NULL;
     }
-    printk("------------------------- alloc page end --------------------------------\n\n");
+    if (OPEN_MEMORY_LOG) printk("------------------------- alloc page end --------------------------------\n\n");
     return v;
 }
 
 // 释放虚拟页, 并解除和物理页的关联关系
 static void _free_page(enum pool_flags pf, void *v) {
-    printk("\n------------------------- free page begin ------------------------------\n");
+    if (OPEN_MEMORY_LOG) printk("\n------------------------- free page begin ------------------------------\n");
     // 释放虚拟页
     void *p = free_virtual_page(pf, v);
     if (!p) {
@@ -728,8 +731,7 @@ static void _free_page(enum pool_flags pf, void *v) {
     }
     // 释放物理页
     free_physical_page(p);
-    // printk("[%s] unbound [0x%x -> 0x%x]\n", __FUNCTION__, v, p);
-    printk("------------------------- free page end --------------------------------\n\n");
+    if (OPEN_MEMORY_LOG) printk("------------------------- free page end --------------------------------\n\n");
 }
 
 // 分配一页内核内存（如果开启了虚拟内存，则返回虚拟地址，并自动挂载物理页）
