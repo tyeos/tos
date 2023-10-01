@@ -2,11 +2,11 @@
 // Created by toney on 2023-08-31.
 //
 
-#include "../include/stdarg.h"
-#include "../include/console.h"
-#include "../include/sys.h"
-#include "../include/eflags.h"
-#include "../include/print.h"
+#include "../../include/stdarg.h"
+#include "../../include/console.h"
+#include "../../include/sys.h"
+#include "../../include/eflags.h"
+#include "../../include/print.h"
 
 extern int vsprintf(char *buf, const char *fmt, va_list args);
 

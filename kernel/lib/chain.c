@@ -2,9 +2,9 @@
 // Created by toney on 23-9-17.
 //
 
-#include "../include/chain.h"
-#include "../include/print.h"
-#include "../include/sys.h"
+#include "../../include/chain.h"
+#include "../../include/print.h"
+#include "../../include/sys.h"
 
 // 添加首个元素
 void chain_init(chain_t *chain) {

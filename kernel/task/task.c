@@ -2,12 +2,12 @@
 // Created by toney on 23-9-16.
 //
 
-#include "../include/task.h"
-#include "../include/print.h"
-#include "../include/sys.h"
-#include "../include/string.h"
-#include "../include/init.h"
-#include "../include/ide.h"
+#include "../../include/task.h"
+#include "../../include/print.h"
+#include "../../include/sys.h"
+#include "../../include/string.h"
+#include "../../include/init.h"
+#include "../../include/ide.h"
 
 
 /*
@@ -143,7 +143,11 @@ uint32 get_current_task_pid() {
     return current_task->pid;
 }
 
-static task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func) {
+uint32 get_running_task_no() {
+    return tasks.size;
+}
+
+task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func) {
     // 创建任务
     task_t *task = alloc_kernel_page();
     memset(task, 0, PAGE_SIZE);
@@ -166,7 +170,7 @@ static task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func
     return task;
 }
 
-static task_t *create_user_process(char *name, uint8 priority, task_func_t func) {
+task_t *create_user_process(char *name, uint8 priority, task_func_t func) {
     // 创建任务
     task_t *task = alloc_kernel_page();
     memset(task, 0, PAGE_SIZE);
@@ -194,24 +198,6 @@ static task_t *create_user_process(char *name, uint8 priority, task_func_t func)
     return task;
 }
 
-static void *idle(void *args) {
-    ide_init();
-
-    create_kernel_thread("K_A", 2, kernel_task_a);
-//    create_kernel_thread("K_B", 1, kernel_task_b);
-//    create_user_process("U_PA", 1, user_task_a);
-//    create_user_process("U_PB", 1, user_task_b);
-
-    bool all_task_end = false;
-    for (int i = 0;; ++i) {
-        if (!all_task_end && tasks.size == 1) {
-            all_task_end = true;
-            printk("idle :::::: all task have exited, except for idle ~ %d\n", i);
-        }
-        SLEEP_ITS(2)
-    }
-    return NULL;
-}
 
 void task_init() {
     pids.map = kmalloc(256 >> 3); // 最多支持分配256个任务

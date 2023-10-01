@@ -3,8 +3,8 @@
 // 该文件参考linux内核源码
 //
 
-#include "../include/stdarg.h"
-#include "../include/string.h"
+#include "../../include/stdarg.h"
+#include "../../include/string.h"
 
 /* we use this so that we can do without the ctype library */
 #define is_digit(c) ((c) >= '0' && (c) <= '9')

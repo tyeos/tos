@@ -2,10 +2,10 @@
 // Created by toney on 23-9-17.
 //
 
-#include "../include/bitmap.h"
-#include "../include/string.h"
-#include "../include/print.h"
-#include "../include/mm.h"
+#include "../../include/bitmap.h"
+#include "../../include/string.h"
+#include "../../include/print.h"
+#include "../../include/mm.h"
 
 uint32 bitmap_init(bitmap_t *bitmap) {
     uint32 bytes = (bitmap->total + 7) >> 3; // 1个字节可以表示8个物理页的使用情况

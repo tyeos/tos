@@ -2,9 +2,9 @@
 // Created by toney on 23-9-20.
 //
 
-#include "../include/syscall.h"
-#include "../include/print.h"
-#include "../include/task.h"
+#include "../../include/syscall.h"
+#include "../../include/print.h"
+#include "../../include/task.h"
 
 extern void exit_user_model(); // 退出当前用户任务函数，汇编中定义
 

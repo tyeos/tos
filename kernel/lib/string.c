@@ -2,7 +2,7 @@
 // Created by toney on 23-8-30.
 //
 
-#include "../include/types.h"
+#include "../../include/types.h"
 
 char *strcpy(char *dest, const char *src) {
     char *ptr = dest;

@@ -2,9 +2,9 @@
 // Created by Toney on 2023/9/28.
 //
 
-#include "../include/lock.h"
-#include "../include/eflags.h"
-#include "../include/print.h"
+#include "../../include/lock.h"
+#include "../../include/eflags.h"
+#include "../../include/print.h"
 
 static chain_elem_pool_t waiter_pool;
 extern task_t *current_task;

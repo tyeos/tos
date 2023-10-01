@@ -166,8 +166,14 @@ void task_init();
 
 void task_scheduler_ticks();
 uint32 exit_current_task();
-uint32 get_current_task_pid() ;
 
+uint32 get_current_task_pid();
+uint32 get_running_task_no();
+
+task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func);
+task_t *create_user_process(char *name, uint8 priority, task_func_t func);
+
+void *idle(void *args);
 
 // test tasks
 void *kernel_task_a(void *args);
