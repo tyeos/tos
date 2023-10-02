@@ -72,12 +72,7 @@ void *alloc_physical_page() {
         return NULL;
     }
 
-    int32 idx = bitmap_alloc(&g_physical_memory.bitmap);
-    if (idx == ERR_IDX) {
-        printk("[%s] memory error!\n", __FUNCTION__);
-        STOP
-        return NULL;
-    }
+    uint32 idx = bitmap_alloc(&g_physical_memory.bitmap);
     void *p = (void *) (g_physical_memory.addr_start + (idx << 12));
     if (OPEN_MEMORY_LOG)
         printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.bitmap.total);

@@ -8,7 +8,7 @@
 
 #define EOS '\0'            // End Of String
 #define NULL ((void *)0)    // null pointer
-#define ERR_IDX (-1)        // error index
+#define ERR_IDX (-1)        // error index, 如果是unsigned类型, 相当于最大值
 
 typedef char int8;
 typedef short int16;

@@ -10,7 +10,7 @@
 typedef struct bitmap_t {
     uint32 total;       // 总可分配的位图数量, 最大值为map占用字节数*8
     uint32 used;        // 已分配的位图数量
-    uint32 cursor;      // 游标, 下一次分配开始检查的bit位置
+    uint32 fast;        // 快速指针, 记录未分配bit的起始位置，正常分配从0开始扫描，快速分配直接走空闲位置划一块出去，直到最后
     uint8 *map;         // 用bit记录使用情况
 } __attribute__((packed)) bitmap_t;
 
@@ -18,9 +18,15 @@ typedef struct bitmap_t {
 uint32 bitmap_init(bitmap_t *bitmap);
 
 // 申请占用1bit, 成功返回在位图中的位置, 失败范围-1
-int bitmap_alloc(bitmap_t *bitmap);
+uint32 bitmap_alloc(bitmap_t *bitmap);
 
 // 释放占用的1bit, 成功返回在位图中的位置, 失败范围-1
-int bitmap_free(bitmap_t *bitmap, uint32 cursor);
+uint32 bitmap_free(bitmap_t *bitmap, uint32 bit_idx);
+
+// 按块申请连续位, 成功返回在位图中的起始位置, 失败返回 ERR_IDX
+uint32 bitmap_alloc_block(bitmap_t *bitmap, uint32 bits);
+
+// 按块释放连续位, 成功返回在位图中的起始位置, 失败返回 ERR_IDX
+uint32 bitmap_free_block(bitmap_t *bitmap, uint32 bit_idx, uint32 bits);
 
 #endif //TOS_BITMAP_H

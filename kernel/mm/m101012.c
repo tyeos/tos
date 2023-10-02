@@ -553,14 +553,8 @@ static void *_alloc_virtual_page(enum pool_flags pf) {
         mp = &current_task->user_vaddr_alloc;
     }
 
-    int idx = bitmap_alloc(&mp->bitmap);
-    if (idx == ERR_IDX) {
-        printk("[%s] memory error!\n", __FUNCTION__);
-        STOP
-        return NULL;
-    }
-
-    void *p = (void *) (mp->addr_start + ((uint32) idx << 12));
+    uint32 idx = bitmap_alloc(&mp->bitmap);
+    void *p = (void *) (mp->addr_start + (idx << 12));
     if (OPEN_MEMORY_LOG) printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, mp->bitmap.total);
     return p;
 }
