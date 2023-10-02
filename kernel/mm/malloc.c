@@ -94,7 +94,7 @@ struct bucket_desc {            // 16 bytes
     --------------------
 */
 struct _bucket_dir {           // 8 bytes
-    int size;                  // bucket大小，单位字节
+    size_t size;               // bucket大小，单位字节
     struct bucket_desc *chain; // 一个bucket目录可以挂多个bucket实例
 };
 
@@ -231,7 +231,7 @@ void *kmalloc(size_t len) {
  *
  * We will #define a macro so that "kmfree(x)" is becomes "kmfree_s(x, 0)"
  */
-void kmfree_s(void *obj, int size) {
+void kmfree_s(void *obj, size_t size) {
     void *page;
     struct _bucket_dir *bdir;
     struct bucket_desc *bdesc, *prev;

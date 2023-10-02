@@ -58,6 +58,7 @@ void physical_memory_init() {
 
     if (!ok) {
         printk("[%s:%d] unavailable physical memory!\n", __FILE__, __LINE__);
+        STOP
         return;
     }
 
@@ -69,13 +70,14 @@ void physical_memory_init() {
 void *alloc_physical_page() {
     if (g_physical_memory.addr_start != AVAILABLE_ALLOC_MEMORY_FROM) {
         printk("[%s] no memory available!\n", __FUNCTION__);
+        STOP
         return NULL;
     }
 
     uint32 idx = bitmap_alloc(&g_physical_memory.bitmap);
     void *p = (void *) (g_physical_memory.addr_start + (idx << 12));
     if (OPEN_MEMORY_LOG)
-        printk("[%s] alloc page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.bitmap.total);
+        printk("[%s] alloc page: 0x%X\n", __FUNCTION__, p);
     return p;
 }
 
@@ -83,10 +85,11 @@ void *alloc_physical_page() {
 void free_physical_page(void *p) {
     if ((uint) p < g_physical_memory.addr_start || (uint) p > g_physical_memory.addr_end) {
         printk("[%s] invalid address: 0x%x\n", __FUNCTION__, p);
+        STOP
         return;
     }
 
     bitmap_free(&g_physical_memory.bitmap, (uint32) (p - g_physical_memory.addr_start) >> 12);
     if (OPEN_MEMORY_LOG)
-        printk("[%s] free page: 0x%X, used: %d pages\n", __FUNCTION__, p, g_physical_memory.bitmap.used);
+        printk("[%s] free page: 0x%X\n", __FUNCTION__, p);
 }

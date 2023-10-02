@@ -33,4 +33,7 @@
 #define SLEEP_MS(millisecond) SLEEP_ITS(MS2TIMES(millisecond))      // 暂停指定毫秒数
 #define SLEEP(second) SLEEP_ITS(S2TIMES(second))                    // 暂停指定秒数
 
+// 暂时先放这里了，向上取整的除法运算
+#define DIV_ROUND_UP(dividend, divisor) ((dividend + divisor - 1) / divisor)
+
 #endif //TOS_SYS_H

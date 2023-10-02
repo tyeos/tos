@@ -415,7 +415,7 @@ static void scan_partitions(disk_t *disk) {
         scan_ext_partitions(disk, mbs->tables[primary_idx].start_lba);
     }
 
-    kmfree(mbs);
+    kmfree_s(mbs, SECTOR_SIZE);
 }
 
 /*

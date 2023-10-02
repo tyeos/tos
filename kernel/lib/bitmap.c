@@ -54,6 +54,8 @@ uint32 bitmap_alloc(bitmap_t *bitmap) {
 
 // 按块申请连续位, 成功返回在位图中的起始位置, 失败返回 ERR_IDX
 uint32 bitmap_alloc_block(bitmap_t *bitmap, uint32 bits) {
+    if (bits == 1) return bitmap_alloc(bitmap);
+
     // 必须先初始化
     if (!bitmap->total) {
         printk("[%s] %p no bits available!\n", __FUNCTION__, bitmap);
@@ -145,6 +147,8 @@ uint32 bitmap_free(bitmap_t *bitmap, uint32 bit_idx) {
 
 // 按块释放连续位, 成功返回在位图中的起始位置, 失败返回 ERR_IDX
 uint32 bitmap_free_block(bitmap_t *bitmap, uint32 bit_idx, uint32 bits) {
+    if (bits == 1) return bitmap_free(bitmap, bit_idx);
+
     if (bit_idx + bits > bitmap->total) {
         printk("[%s] %p out [%d~%d / %d] \n", __FUNCTION__, bitmap, bit_idx, bit_idx + bits - 1,
                bitmap->total - 1);
