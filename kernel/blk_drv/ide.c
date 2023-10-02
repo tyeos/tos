@@ -324,7 +324,7 @@ static void identify_disk(disk_t *disk) {
     printk("    CAPACITY: %dMB\n", disk->sec_cnt >> 11);
 }
 
-static uint8 whole_logic_idx = 0;    // 记录总的逻辑分区下标
+static uint8 whole_logic_idx = 0;    // 记录总的逻辑分区下标，临时使用
 /*
  * 扫描扩展分区，内部递归调用
  */
@@ -396,6 +396,9 @@ static void scan_partitions(disk_t *disk) {
 
     printk("-----------mbs--------------\n");
     print_hex_buff((char *) mbs, SECTOR_SIZE);
+
+    // 换了磁盘，总逻辑分区下标从0开始
+    whole_logic_idx = 0;
 
     for (uint8 primary_idx = 0; primary_idx < 4; ++primary_idx) {
         // 如果不是有效分区类型，直接读下一个分区

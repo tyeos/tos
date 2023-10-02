@@ -24,7 +24,7 @@ typedef unsigned long long uint64;
 typedef unsigned int size_t;
 
 #define bool uint8
-#define true 1
+#define true 1  // 非0即为true, 该值非唯一
 #define false 0
 
 #endif //TOS_TYPES_H

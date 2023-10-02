@@ -18,6 +18,6 @@ _Noreturn void *idle(void *args) {
 
     while (true) {
         if (get_running_task_no() == 1) printk("idle :::::: all task have exited, except for idle ~\n");
-        SLEEP(30)
+        SLEEP(300)
     }
 }
