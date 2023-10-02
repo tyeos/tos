@@ -55,7 +55,7 @@
  * 参考 loader.asm 中 Status寄存器结构
  */
 #define BIT_ALT_STAT_BSY 0x80   // 硬盘忙
-#define BIT_ALT_STAT_DRDY 0x40  // 驱动器准备好了
+#define BIT_ALT_STAT_RDY 0x40   // 驱动器准备好了
 #define BIT_ALT_STAT_DRQ 0x8    // 数据传输准备好了
 
 
@@ -76,6 +76,44 @@ static void hd_count_init() {
     // 这里简单计算，即硬盘按顺序挂载，前两块盘挂主通道，从第三块盘开始挂从通道
     channel_cnt = hd_cnt > 2 ? 2 : 1;
     printk("ide: hd_cnt = %d \n", hd_cnt);
+}
+
+/*
+ * 等待硬盘响应。
+ * 在ata手册中有这么一句话：“All actions required in this state shall be completed within 31s",
+ * 大概意思是所有的操作都应该在31秒内完成，所以等待硬盘响应还是有个时间上限的，
+ * 这里读取硬盘状态，如果繁忙则尝试等待，若成功则返回true
+ *
+ * 这里有两个调用时机：
+ * 1，用在发送完cmd命令之后调用（flag = BIT_ALT_STAT_DRQ）
+ *      一般情况下检测即可通过，这个是用在操作多扇区时，硬盘会频繁中断和修改状态。
+ * 2，用在发送完cmd命令之前调用（flag = BIT_ALT_STAT_RDY）
+ *      一般情况下硬盘都是一直准备好的状态，当然也不排除特殊情况，这里调用有两个作用：
+ *      1.1，确保硬盘可用
+ *      1.2，告知硬盘上一次的数据已经处理完毕（如果硬盘认为上一次的数据未处理，会一直阻塞）
+ */
+static bool busy_wait(ide_channel_t *channel, uint8 flag) {
+    // 这里将5秒转成时钟中断周期，如果还没获取到，就失败
+    uint32 times = S2TIMES(5); // 注：这里的实际时间会和当前任务数有关
+    uint8 status;
+    for (int i = 0; i < times; ++i) {
+        status = inb(reg_status(channel));
+//    printk("[%s] status = 0x%x!\n", __FUNCTION__, status & 0xff);
+        if (!(status & BIT_ALT_STAT_BSY)) return status & BIT_ALT_STAT_DRQ;
+        HLT
+    }
+    return false;
+}
+
+/*
+ * 读取硬盘状态，看是否是非繁忙之外的某个标记状态（BIT_ALT_STAT_DRQ | BIT_ALT_STAT_RDY）。
+ * 读取硬盘状态寄存器成功相当于告知CPU此次中断已被处理，即CPU需要赶紧将数据取走
+ */
+static bool check_status_not_busy(ide_channel_t *channel, uint8 flag) {
+    uint8 status = inb(reg_status(channel));
+//    printk("[%s] status = 0x%x!\n", __FUNCTION__, status & 0xff);
+    if (!(status & BIT_ALT_STAT_BSY)) return status & flag;
+    return false;
 }
 
 /*
@@ -114,6 +152,12 @@ static void select_sector(disk_t *disk, uint32 lba, uint8 sec_cnt) {
  *    cmd: CMD_IDENTIFY     检测扇区
  */
 static void cmd_out(ide_channel_t *channel, uint8 cmd) {
+    // 发送命令之前，先检测硬盘状态，确保可用
+    // 先立即检测一次，准备好可直接读，如果硬盘没准备好，则等待硬盘，直至超时
+    if (!check_status_not_busy(channel, BIT_ALT_STAT_RDY) && !busy_wait(channel, BIT_ALT_STAT_RDY)) {
+        printk("[%s] disk busy!\n", __FUNCTION__);
+        STOP
+    }
     channel->waiting = true;
     outb(reg_cmd(channel), cmd);
 }
@@ -125,6 +169,12 @@ static void cmd_out(ide_channel_t *channel, uint8 cmd) {
  *      sec_cnt: 读多少个扇区，最多支持256个, 0表示256
  */
 static void read_sector(ide_channel_t *channel, void *buf, uint8 sec_cnt) {
+    // 读取数据之前，先检测硬盘状态，确保可用
+    // 先立即检测一次，准备好可直接读，如果硬盘没准备好，则等待硬盘，直至超时
+    if (!check_status_not_busy(channel, BIT_ALT_STAT_DRQ) && !busy_wait(channel, BIT_ALT_STAT_DRQ)) {
+        printk("[%s] disk busy!\n", __FUNCTION__);
+        STOP
+    }
     insw(reg_data(channel), buf, (sec_cnt ? sec_cnt : 256) << 9 >> 1);  // 1扇区512字节, 按字读入
 }
 
@@ -135,34 +185,13 @@ static void read_sector(ide_channel_t *channel, void *buf, uint8 sec_cnt) {
  *      sec_cnt: 要读多少个扇区写入硬盘，最多支持256个, 0表示256
  */
 static void write_sector(ide_channel_t *channel, void *buf, uint8 sec_cnt) {
-    outsw(reg_data(channel), buf, (sec_cnt ? sec_cnt : 256) << 9 >> 1);  // 1扇区512字节, 按字写出
-}
-
-/*
- * 读取硬盘状态，如果繁忙返回false，若成功则返回true：
- * 读取硬盘状态寄存器成功相当于告知CPU此次中断已被处理，即CPU需要赶紧将数据取走
- */
-static bool check_status(ide_channel_t *channel) {
-    char status = inb(reg_status(channel));
-//    printk("[%s] status = 0x%x!\n", __FUNCTION__, status & 0xff);
-    if (!(status & BIT_ALT_STAT_BSY)) return (status & BIT_ALT_STAT_DRQ) >> 3;
-    return false;
-}
-
-/*
- * 等待硬盘响应，用在发送完cmd命令之后调用。
- * 在ata手册中有这么一句话：“All actions required in this state shall be completed within 31s",
- * 大概意思是所有的操作都应该在31秒内完成，所以等待硬盘响应还是有个时间上限的，
- * 这里读取硬盘状态，如果繁忙则尝试等待，若成功则返回true
- */
-static bool busy_wait(disk_t *disk) {
-    // 这里将5秒转成时钟中断周期，如果还没获取到，就失败
-    uint32 times = S2TIMES(5); // 注：这里的实际时间会和当前任务数有关
-    for (int i = 0; i < times; ++i) {
-        if (check_status(disk->channel)) return true;
-        HLT
+    // 读取数据之前，先检测硬盘状态，确保可用
+    // 先立即检测一次，准备好可直接写，如果硬盘没准备好，则等待硬盘，直至超时
+    if (!check_status_not_busy(channel, BIT_ALT_STAT_DRQ) && !busy_wait(channel, BIT_ALT_STAT_DRQ)) {
+        printk("[%s] disk busy!\n", __FUNCTION__);
+        STOP
     }
-    return false;
+    outsw(reg_data(channel), buf, (sec_cnt ? sec_cnt : 256) << 9 >> 1);  // 1扇区512字节, 按字写出
 }
 
 
@@ -192,13 +221,7 @@ void ide_read(struct disk_t *disk, uint32 lba, void *buf, uint32 sec_cnt) {
         // 等待硬盘中断信号
         sema_down(&disk->channel->disk_done);
 
-        // 已经等到硬盘唤醒信号，开始检测硬盘状态, 先立即检测一次，如果硬盘没准备好，则等待硬盘，直至超时
-        if (!check_status(disk->channel) && !busy_wait(disk)) {
-            printk("[%s] disk busy!\n", __FUNCTION__);
-            STOP
-        }
-
-        // 从硬盘缓冲区中将数据读出，一次读一个扇区
+        // 已经等到硬盘唤醒信号，从硬盘缓冲区中将数据读出，一次读一个扇区（内部自动检测状态）
         read_sector(disk->channel, (void *) ((uint32) buf + (i << 9)), 1);
     }
 
@@ -220,22 +243,18 @@ void ide_write(struct disk_t *disk, uint32 lba, void *buf, uint32 sec_cnt) {
     for (int i = 0; i < sec_cnt; ++i) {
         // 内部一次写一个扇区
         select_sector(disk, lba + i, 1);
+
         // 发送写扇区命令
         cmd_out(disk->channel, CMD_WRITE_SECTOR);
 
-        // 检测硬盘状态, 如果没问题可以直接写，先立即检测一次，如果硬盘没准备好，则等待硬盘，直至超时
-        if (!check_status(disk->channel) && !busy_wait(disk)) {
-            printk("[%s] disk busy!\n", __FUNCTION__);
-            STOP
-        }
-
-        // 开始写盘
+        // 开始写盘（内部自动检测状态）
         write_sector(disk->channel, (void *) ((uint32) buf + (i << 9)), 1);
 
         // 数据写入完成，等待硬盘中断信号
         sema_down(&disk->channel->disk_done);
 
-        // 收到中断即可进行下一次写入
+        // 收到中断需要读取一下状态，即告知硬盘数据响应已被处理，然后即可进行下一次写入
+        check_status_not_busy(disk->channel, BIT_ALT_STAT_DRQ);
     }
 
     unlock(&disk->channel->lock);
@@ -286,13 +305,7 @@ static void identify_disk(disk_t *disk) {
     // 等待信号量
     sema_down(&disk->channel->disk_done);
 
-    // 已等到信号，先立即检测一次，如果硬盘没准备好，则等待硬盘，直至超时
-    if (!check_status(disk->channel) && !busy_wait(disk)) {
-        printk("[%s] disk busy!\n", __FUNCTION__);
-        STOP
-    }
-
-    // 读取第一个扇区
+    // 已等到信号，读取第一个扇区（内部自动检测状态）
     char *id_info = kmalloc(SECTOR_SIZE);
     read_sector(disk->channel, id_info, 1);
 
@@ -485,7 +498,11 @@ void hd_interrupt_handler(uint8 vector_no) {
     // 每次读写硬盘时会申请锁, 保证了同步一致性
     uint8 cno = vector_no - 0x2e; // 主通道终端号0x2f, 从通道中断号0x2e
     ide_channel_t *channel = &channels[cno];
-    if (!channel->waiting) return;
+    if (!channel->waiting) {
+        printk("[%s] [%s] not fount waiter [0x%x] ~", __FUNCTION__, channel->name, vector_no);
+        STOP
+        return;
+    }
     // 唤醒任务
     channel->waiting = false;
     sema_up(&channel->disk_done);
