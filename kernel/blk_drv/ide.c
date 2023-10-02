@@ -8,6 +8,7 @@
 #include "../../include/io.h"
 #include "../../include/string.h"
 #include "../../include/eflags.h"
+#include "../../include/fs.h"
 
 
 /*
@@ -335,7 +336,7 @@ static void scan_ext_partitions(disk_t *disk, uint32 ext_lba_base) {
     // 扫描这块盘的分区信息
     boot_sector_t *ebs = kmalloc(SECTOR_SIZE);
     ide_read(disk, ext_lba_base, ebs, 1);
-    print_hex_buff((char *) ebs, SECTOR_SIZE);
+//    print_hex_buff((char *) ebs, SECTOR_SIZE);
 
     for (uint8 sub_logic_idx = 0; sub_logic_idx < 4; ++sub_logic_idx) {
         // 如果不是有效分区类型，直接读下一个分区
@@ -395,7 +396,7 @@ static void scan_partitions(disk_t *disk) {
     ide_read(disk, 0, mbs, 1);
 
     printk("-----------mbs--------------\n");
-    print_hex_buff((char *) mbs, SECTOR_SIZE);
+//    print_hex_buff((char *) mbs, SECTOR_SIZE);
 
     // 换了磁盘，总逻辑分区下标从0开始
     whole_logic_idx = 0;
@@ -489,7 +490,7 @@ void ide_init() {
     }
 
     // 分区检测完毕，检查文件系统
-//    file_sys_init(&partition_chain);
+    file_sys_init(&partition_chain);
 }
 
 /*
