@@ -10,7 +10,7 @@
 #include "bitmap.h"
 #include "lock.h"
 
-#define SECTOR_SIZE 512   // 一个扇区的大小
+#define SECTOR_SIZE 512   // 一个扇区512字节
 
 /*
  * IDE (Integrated Device Electronics) 也称 ATA（AT Attachment）。

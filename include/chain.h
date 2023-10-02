@@ -60,6 +60,12 @@ chain_elem_t *chain_pop_first(chain_t *chain);
 // 弹出链表尾部元素
 chain_elem_t *chain_pop_last(chain_t *chain);
 
+// 读取链表中的第一个元素
+chain_elem_t *chain_read_first(chain_t *chain);
+
+// 读取链表中某个元素的的下一个元素
+chain_elem_t *chain_read_next(chain_t *chain, chain_elem_t *cur_elem);
+
 // 删除某个元素
 chain_elem_t *chain_remove(chain_t *chain, chain_elem_t *elem);
 

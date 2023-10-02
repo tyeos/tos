@@ -55,7 +55,7 @@ void free_physical_page(void *p);
 
 // 分配、释放内核内存页（虚拟页）
 void *alloc_kernel_page();
-void free_kernel_page(void *p);
+void free_kernel_page(void *v);
 void *alloc_kernel_pages(uint32 no);
 void free_kernel_pages(void *v, uint32 no);
 
@@ -65,7 +65,7 @@ void free_user_page(void *p);
 
 // 按字节分配、释放内存（内核虚拟页）
 void *kmalloc(size_t size);
-void kmfree_s(void *obj, uint32 size);
+void kmfree_s(void *obj, size_t size);
 #define kmfree(x) kmfree_s(x, 0)
 
 // 创建虚拟页目录表、用户虚拟地址池初始化（给用户进程用）

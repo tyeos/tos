@@ -101,6 +101,10 @@ void task_scheduler_ticks() {
         // printk("clock_task_scheduler once\n");
         return;
     }
+
+    // 所有任务都不可用
+    printk("[%s] all task waiting [idle state: %d] ~ \n", __FUNCTION__, idle_task->state);
+    STOP
 }
 
 static void clear_task(task_t *task) {

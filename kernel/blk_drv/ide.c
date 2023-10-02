@@ -67,9 +67,7 @@ static ide_channel_t channels[2];
 static uint8 channel_cnt = 0;   // 总通道数
 static uint8 hd_cnt = 0;        // 总硬盘数
 
-
-//static chain_t partition_chain; // 分区队列
-//static chain_elem_pool_t partition_pool; // 分区池
+static chain_t partition_chain; // 分区队列
 
 
 // 获取硬盘数量
@@ -337,7 +335,7 @@ static void scan_ext_partitions(disk_t *disk, uint32 ext_lba_base) {
         if (ebs->tables[sub_logic_idx].fs_type != 0x5) {
             // 逻辑分区目前约定上限存4个，再多就不存了，打印信息即可
             if (whole_logic_idx > 3) {
-                printk("[%s][%d] index %d is logic disk %s%d: \n", __FUNCTION__, ext_lba_base, sub_logic_idx,
+                printk("[%s][%d] index %d is logic partition %s%d: \n", __FUNCTION__, ext_lba_base, sub_logic_idx,
                        disk->name, whole_logic_idx + LOGIC_PARTITION_BASE_IDX);
                 printk("    start_lba: %d\n", ext_lba_base + ebs->tables[sub_logic_idx].start_lba);
                 printk("    sec_cnt:   %d\n", ebs->tables[sub_logic_idx].sec_cnt);
@@ -354,12 +352,14 @@ static void scan_ext_partitions(disk_t *disk, uint32 ext_lba_base) {
             sprintfk(partition->name, "%s%d", disk->name, whole_logic_idx + LOGIC_PARTITION_BASE_IDX);
             whole_logic_idx++;
 
-            printk("\n[%s][%d] index %d is logic disk %s:\n", __FUNCTION__, ext_lba_base, sub_logic_idx,
+            printk("\n[%s][%d] index %d is logic partition %s:\n", __FUNCTION__, ext_lba_base, sub_logic_idx,
                    partition->name);
             printk("    start_lba: %d\n", partition->start_lba);
             printk("    sec_cnt:   %d\n", partition->sec_cnt);
 
-//           chain_put_last(&partition_chain, chain_pool_getv(&partition_pool, partition));
+            chain_elem_t *elem = kmalloc(sizeof(chain_elem_t));
+            elem->value = partition;
+            chain_put_last(&partition_chain, elem);
             continue;
         }
 
@@ -399,12 +399,14 @@ static void scan_partitions(disk_t *disk) {
             partition->sec_cnt = mbs->tables[primary_idx].sec_cnt;
             sprintfk(partition->name, "%s%d", disk->name, primary_idx + PRIMARY_PARTITION_BASE_IDX);
 
-            printk("\n[%s] index %d is primary disk %s:\n", __FUNCTION__, primary_idx, partition->name);
+            printk("\n[%s] index %d is primary partition %s:\n", __FUNCTION__, primary_idx, partition->name);
             printk("    start_lba: %d\n", partition->start_lba);
             printk("    sec_cnt:   %d\n", partition->sec_cnt);
 
             // 把分区加到链表中
-//            chain_put_last(&partition_chain, chain_pool_getv(&partition_pool, partition));
+            chain_elem_t *elem = kmalloc(sizeof(chain_elem_t));
+            elem->value = partition;
+            chain_put_last(&partition_chain, elem);
             continue;
         }
 
@@ -435,10 +437,7 @@ void ide_init() {
     hd_count_init();
 
     // 初始化分区链表与缓存池
-//    chain_init(&partition_chain);
-//    partition_pool.addr = alloc_kernel_page();
-//    partition_pool.size = PAGE_SIZE;
-//    chain_pool_init(&partition_pool);
+    chain_init(&partition_chain);
 
     // 初始化primary通道和secondary通道
     for (int cno = 0; cno < channel_cnt; ++cno) {
@@ -472,6 +471,9 @@ void ide_init() {
             if (cno != 0 || dno != 0) scan_partitions(disk);
         }
     }
+
+    // 分区检测完毕，检查文件系统
+//    file_sys_init(&partition_chain);
 }
 
 /*

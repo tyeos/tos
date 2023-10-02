@@ -175,6 +175,9 @@ task_t *create_user_process(char *name, uint8 priority, task_func_t func);
 
 void *idle(void *args);
 
+// 内核任务
+void *kernel_task_ide(void *args);
+
 // test tasks
 void *kernel_task_a(void *args);
 void *kernel_task_b(void *args);

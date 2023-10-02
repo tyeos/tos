@@ -81,8 +81,17 @@ hd3:
 
 hdx: hd1 hd2 hd3
 
+clean_hd1:
+	$(shell rm -f $(BUILD_HD1_IMG))
+
+clean_hd2:
+	$(shell rm -f $(BUILD_HD2_IMG))
+
+clean_hd3:
+	$(shell rm -f $(BUILD_HD3_IMG))
+
 read_hex:
-	xxd -a -u -g 1 -s 0x0 -l 512 $(BUILD_HD_IMG)
+	xxd -a -u -g 1 -s 0x100800 -l 512 $(BUILD_HD2_IMG)
 
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@

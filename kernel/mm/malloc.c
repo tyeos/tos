@@ -45,7 +45,7 @@ struct bucket_desc {            // 16 bytes
     void *freeptr;              // 下一个可供分配的item地址
     unsigned short refcnt;      // 引用计数，释放物理页时要用
     unsigned short bucket_size; // 每个bucket负责一种字节size的分配，且每个bucket管理一个物理页大小的空间
-};
+}__attribute__((packed));
 
 /*
  _bucket_dir 及 bucket_dir 结构：
@@ -96,7 +96,7 @@ struct bucket_desc {            // 16 bytes
 struct _bucket_dir {           // 8 bytes
     size_t size;               // bucket大小，单位字节
     struct bucket_desc *chain; // 一个bucket目录可以挂多个bucket实例
-};
+}__attribute__((packed));
 
 // 一共9种类型的bucket目录，最大支持申请4096字节，即一个物理页大小
 struct _bucket_dir bucket_dir[] = {
@@ -172,7 +172,8 @@ void *kmalloc(size_t len) {
      */
     for (bdir = bucket_dir; bdir->size; bdir++) if (bdir->size >= len) break;
     if (!bdir->size) {
-        printk("kmalloc called with impossibly large argument (%d)\n", len);
+        printk("[%s] called with impossibly large argument (%d)\n", __FUNCTION__, len);
+        STOP
         return NULL;
     }
 
@@ -198,7 +199,8 @@ void *kmalloc(size_t len) {
         bdesc->page = bdesc->freeptr = (void *) (cp = (char *) alloc_kernel_page());    // 申请内存用于分配给调用者
 
         if (!cp) {
-            check_recover_if(iflag);
+            printk("[%s] no memory available (%d)\n", __FUNCTION__, len);
+            STOP
             return NULL; // 没有申请到可用物理页
         }
 
@@ -273,8 +275,8 @@ void kmfree_s(void *obj, size_t size) {
             if (prev) prev->next = bdesc->next; // 将当前bucket释放，上一个bucket的next指针指向当前bucket的next
             else {
                 if (bdir->chain != bdesc) {
-                    printk("bdir err: 0x%x -> 0x%x\n", bdir->chain, bdesc);
-                    check_recover_if(iflag);
+                    printk("[%s] [%p] %d : [0x%x -> 0x%x]\n", __FUNCTION__, obj, size, bdir->chain, bdesc);
+                    STOP
                     return; // 这里理论上是相等的
                 }
                 bdir->chain = bdesc->next;        // 如果当前bucket位于首位，则直接将下一个bucket地址作为chain链表地址

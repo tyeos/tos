@@ -77,7 +77,7 @@ int memcmp(const void *lhs, const void *rhs, size_t count) {
     return *lptr < *rptr ? -1 : *lptr > *rptr;
 }
 
-void *memset(void *dest, int ch, size_t count) {
+void *memset(void *dest, char ch, size_t count) {
     char *ptr = dest;
     while (count--) {
         *ptr++ = ch;
@@ -101,5 +101,6 @@ void *memchr(const void *str, int ch, size_t count) {
         }
         ptr++;
     }
+    return NULL;
 }
 

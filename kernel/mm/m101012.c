@@ -700,24 +700,24 @@ void process_destroy(task_t *task) {
 static void *_alloc_pages(enum pool_flags pf, uint32 no) {
     if (OPEN_MEMORY_LOG) printk("\n------------------------- alloc page begin ------------------------------\n");
     // 申请连续的多个虚拟页
-    uint32 *virtual_page = alloc_virtual_pages(pf, no);
+    void *virtual_page = alloc_virtual_pages(pf, no);
     if (OPEN_MEMORY_LOG) printk("[%s] 0x%X\n", __FUNCTION__, virtual_page);
 
     // 申请多个物理页, 并和虚拟页绑定
     for (int i = 0; i < no; ++i) {
         void *physical_page = alloc_physical_page(); // 物理页可以不连续
-        bind_page(pf, virtual_page + i, physical_page);
+        bind_page(pf, (void *) ((uint32) virtual_page + (i << 12)), physical_page);
     }
     if (OPEN_MEMORY_LOG) printk("------------------------- alloc page end --------------------------------\n\n");
     return virtual_page;
 }
 
 // 释放连续多个虚拟页, 并解除和物理页的关联关系
-static void _free_pages(enum pool_flags pf, uint32 *v, uint32 no) {
+static void _free_pages(enum pool_flags pf, void *v, uint32 no) {
     if (OPEN_MEMORY_LOG) printk("\n------------------------- free page begin ------------------------------\n");
     void *p;
     for (int i = 0; i < no; ++i) {
-        p = unbind_page(pf, v + i); // 解绑虚拟页
+        p = unbind_page(pf, (void *) ((uint32) v + (i << 12))); // 解绑虚拟页
         // 释放物理页
         free_physical_page(p);
     }

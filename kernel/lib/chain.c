@@ -123,6 +123,18 @@ chain_elem_t *chain_pop_last(chain_t *chain) {
     return chain_remove(chain, chain->tail.prev);
 }
 
+// 读取链表中的第一个元素
+chain_elem_t *chain_read_first(chain_t *chain) {
+    if (chain->size == 0) return NULL;
+    return chain->head.next;
+}
+
+// 读取链表中某个元素的的下一个元素
+chain_elem_t *chain_read_next(chain_t *chain, chain_elem_t *cur_elem) {
+    if (cur_elem == chain->tail.prev) return NULL;
+    return cur_elem->next;
+}
+
 // 链表中是否存在某个元素
 bool chain_exist(chain_t *chain, chain_elem_t *elem) {
     for (chain_elem_t *i = chain->head.next; i != &chain->tail; i = i->next) if (i == elem) return true;
