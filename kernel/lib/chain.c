@@ -151,6 +151,11 @@ bool chain_empty(chain_t *chain) {
     return chain->size == 0 || chain->head.next == &chain->tail;
 }
 
+// 清空链表元素中的所有值
+void chain_elem_clear(chain_elem_t *elem) {
+    elem->value = elem->next = elem->prev = NULL;
+}
+
 /*
  * 链表缓存池初始化
  */

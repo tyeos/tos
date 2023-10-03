@@ -17,6 +17,28 @@ uint32 bitmap_init(bitmap_t *bitmap) {
     return bytes;
 }
 
+// bitmap 慢速初始化，即直接使用原位图，在其基础上进行初始化
+void bitmap_slow_init(bitmap_t *bitmap) {
+    bitmap->used = 0;   // 已使用数无法确定
+    bitmap->fast = 0;   // 停用按块申请
+
+    // 走fast指针回收的逻辑
+    uint32 shadow_fast = bitmap->total + 1; // 默认指向最后
+    while (shadow_fast) {
+        // 检查是否可按整字节回收
+        if (shadow_fast % 8 == 0 && bitmap->map[(shadow_fast >> 3) - 1] == 0) {
+            shadow_fast -= 8;
+            continue;
+        }
+        // 检查上一位是否可回收
+        if (bitmap->map[(shadow_fast - 1) >> 3] & (1 << (shadow_fast - 1) % 8)) {
+            bitmap->used++;     // 该位为1，不可回收
+            if (!bitmap->fast) bitmap->fast = shadow_fast; // 如果fast为0则赋值
+        }
+        shadow_fast--;
+    }
+}
+
 // 申请占用1bit, 成功返回在位图中的位置, 失败返回 ERR_IDX
 uint32 bitmap_alloc(bitmap_t *bitmap) {
     // 必须先初始化
@@ -34,7 +56,7 @@ uint32 bitmap_alloc(bitmap_t *bitmap) {
 
     // 每次从0开始扫描, 最多扫描次数为总bit数, 暂不考虑效率问题（优化可以加一个慢速指针，在已用区域循环扫描，限制次数内还未找到可跳至快速指针）
     for (uint32 bit_idx = 0, byte_idx; bit_idx < bitmap->total; bit_idx++) {
-        byte_idx = bit_idx / 8; // 全bytes索引
+        byte_idx = bit_idx >> 3; // 全bytes索引
         if (bitmap->map[byte_idx] & (1 << bit_idx % 8)) continue; // 已分配
         bitmap->map[byte_idx] |= (1 << bit_idx % 8); // 尚未分配, 可用, 进行分配
         bitmap->used++; // 使用数+1
@@ -103,7 +125,7 @@ uint32 bitmap_alloc_block(bitmap_t *bitmap, uint32 bits) {
     bitmap->used += bits;
 
     if (OPEN_MEMORY_LOG)
-        printk("[%s] %p [%d ~ %d/ %d]\n", __FUNCTION__, bitmap, bit_idx, bit_idx + bits - 1, bitmap->total - 1);
+        printk("[%s] %p [%d ~ %d / %d]\n", __FUNCTION__, bitmap, bit_idx, bit_idx + bits - 1, bitmap->total - 1);
 
     return bit_idx;
 }
@@ -112,12 +134,12 @@ uint32 bitmap_alloc_block(bitmap_t *bitmap, uint32 bits) {
 static void check_reduce_fast(bitmap_t *bitmap) {
     while (bitmap->fast) {
         // 检查是否可按整字节回收
-        if (bitmap->fast % 8 == 0 && bitmap->map[bitmap->fast / 8 - 1] == 0) {
+        if (bitmap->fast % 8 == 0 && bitmap->map[(bitmap->fast >> 3) - 1] == 0) {
             bitmap->fast -= 8;
             continue;
         }
         // 检查上一位是否可回收
-        if (bitmap->map[(bitmap->fast - 1) / 8] & (1 << (bitmap->fast - 1) % 8)) return; // 该位为1，不可回收
+        if (bitmap->map[(bitmap->fast - 1) >> 3] & (1 << (bitmap->fast - 1) % 8)) return; // 该位为1，不可回收
         bitmap->fast--;
     }
 }
@@ -129,7 +151,7 @@ uint32 bitmap_free(bitmap_t *bitmap, uint32 bit_idx) {
         STOP
         return ERR_IDX;
     }
-    uint byte_idx = bit_idx / 8;
+    uint byte_idx = bit_idx >> 3;
     if (bitmap->map[byte_idx] & (1 << bit_idx % 8)) { // 可回收
         bitmap->map[byte_idx] &= ~(1 << bit_idx % 8);
         bitmap->used--;
@@ -155,7 +177,7 @@ uint32 bitmap_free_block(bitmap_t *bitmap, uint32 bit_idx, uint32 bits) {
         STOP
         return ERR_IDX;
     }
-    uint byte_idx = bit_idx / 8;                // 起始byte位置
+    uint byte_idx = bit_idx >> 3;               // 起始byte位置
     uint8 byte_bit_idx = bit_idx % 8;           // 起始bit在byte中的位置
     uint8 byte_rest_bits = 8 - byte_bit_idx;    // 当前byte中最多可连续释放的bit数
 

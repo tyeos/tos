@@ -81,6 +81,9 @@ uint32 chain_len(chain_t *chain);
 // 返回链表是否为空
 bool chain_empty(chain_t *chain);
 
+// 清空链表元素中的所有值
+void chain_elem_clear(chain_elem_t *elem);
+
 // 初始化链表元素缓存池
 void chain_pool_init(chain_elem_pool_t *pool);
 
