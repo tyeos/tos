@@ -91,7 +91,7 @@ clean_hd3:
 	$(shell rm -f $(BUILD_HD3_IMG))
 
 read_hex:
-	xxd -a -u -g 1 -s 0x152600 -l 512 $(BUILD_HD1_IMG)
+	xxd -a -u -g 1 -s 0x152800 -l 512 $(BUILD_HD1_IMG)
 
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@
@@ -126,8 +126,8 @@ all: build hd hdx
 	dd if=$(word 1, $(BUILD_BOOT_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=0 count=1 conv=notrunc
 	# 给loader分配4个扇区
 	dd if=$(word 2, $(BUILD_BOOT_O_FILES)) of=$(BUILD_HD_IMG) bs=512 seek=1 count=4 conv=notrunc
-	# 给system分配100个扇区
-	dd if=$(BUILD_KERNEL_BIN) of=$(BUILD_HD_IMG) bs=512 seek=5 count=100 conv=notrunc
+	# 给system分配128个扇区
+	dd if=$(BUILD_KERNEL_BIN) of=$(BUILD_HD_IMG) bs=512 seek=5 count=128 conv=notrunc
 
 bochs: all
 	$(shell rm -f $(BUILD_HD_IMG).lock)

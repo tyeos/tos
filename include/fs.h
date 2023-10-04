@@ -20,6 +20,8 @@
 
 #define MAX_FILE_OPEN 32    //系统可打开的最大文件数
 
+#define STD_FREE_SLOT (-1) // 表示文件描述符可分配，空闲槽位
+
 
 /*
  * 整体概念：
@@ -148,9 +150,9 @@ typedef struct dir_entry_t {
 
 /* 标准输入输出描述符 */
 enum std_fd {
-    stdin_no,   // 0标准输入
-    stdout_no,  // 1标准输出
-    stderr_no   // 2标准错误
+    stdin_no,   // 0 标准输入
+    stdout_no,  // 1 标准输出
+    stderr_no   // 2 标准错误
 };
 
 /* 用来存储inode位置 */
@@ -181,10 +183,7 @@ enum bitmap_type {
     BLOCK_BITMAP    // 块位图
 };
 
-
-int32 sys_open(const char *pathname, uint8 flags);
-
-/*打开文件的选项*/
+// 打开文件的选项
 enum oflags {
     O_RDONLY,       // 只读, 0b000
     O_WRONLY,       // 只写, 0b001
@@ -192,13 +191,18 @@ enum oflags {
     O_CREAT = 4     // 创建, 0b100
 };
 
-/*用来记录查找文件过程中已找到的上级路径，也就是查找文件过程中“走过的地方”*/
+// 用来记录查找文件过程中已找到的上级路径，也就是查找文件过程中“走过的地方”
 typedef struct path_search_record_t {
     char searched_path[MAX_PATH_LEN];   // 查找过程中的父路径
     dir_t *parent_dir;                  // 文件或目录所在的直接父目录
     enum file_types file_type;          // 找到的是普通文件，还是目录，找不到将为未知类型（FT_UNKNOWN)
-} path_search_record_t;
+} __attribute__((packed)) path_search_record_t;
 
+int32 sys_open(const char *pathname, uint8 flags);
+
+int32 sys_write(int32 fd, const void *buf, uint32 count);
+
+int32 sys_close(int32 fd);
 
 void file_sys_init(chain_t *partitions);
 

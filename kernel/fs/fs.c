@@ -11,7 +11,7 @@
 #include "../../include/file.h"
 
 extern dir_t root_dir;
-extern file_t *file_table;
+extern file_t file_table[MAX_FILE_OPEN];
 
 partition_t *cur_part; // 当前挂载的分区
 
@@ -216,7 +216,11 @@ static void partition_format(partition_t *part) {
  */
 void file_sys_init(chain_t *partitions) {
     printk("[%s] searching %d partitions...\n", __FUNCTION__, partitions->size);
-    if (!partitions->size) return;
+    if (!partitions->size) {
+        printk("[%s] not fount partitions!\n", __FUNCTION__);
+        STOP
+        return;
+    }
     // sb_buf用来存储从硬盘上读入的超级块
     super_block_t *sb_buf = (super_block_t *) kmalloc(SECTOR_SIZE);
     partition_t *part;
@@ -336,10 +340,9 @@ static uint32 search_file(const char *pathname, path_search_record_t *searched_r
 /**
  * 打开或创建普通文件
  * @param pathname 普通文件路径
- * @param flags 枚举, oflags
+ * @param flags 枚举 oflags 可以是组合值
  * @return 成功返回文件描述符，否则返回-1
  */
-// 打开或创建文件成功后，返回文件描述符，否则返回-1
 int32 sys_open(const char *pathname, uint8 flags) {
     // 这里只支持普通文件的打开，对于目录要用dir_open
     if (pathname[strlen(pathname) - 1] == '/') {
@@ -381,18 +384,58 @@ int32 sys_open(const char *pathname, uint8 flags) {
     }
     // 如果文件不存在，必须先创建
     if (!found && !(flags & O_CREAT)) {
-        printk("[%s] %s does‘t exist ~\n", __FUNCTION__, pathname);
+        printk("[%s] %s doesn't exist ~\n", __FUNCTION__, pathname);
         dir_close(cur_part, searched_record.parent_dir);
         return -1;
     }
 
     // 其他情况正常给数据
-    int32 fd = -1;
-    if (flags & O_CREAT) { // 创建文件
+    int32 fd;
+    if (flags & O_CREAT) {
+        // 创建文件
         printk("[%s] [%s] creating ~\n", __FUNCTION__, pathname);
-        fd = file_create(searched_record.parent_dir, (strrchr(searched_record.searched_path, '/') + 1));
+        fd = file_create(searched_record.parent_dir, strrchr(searched_record.searched_path, '/') + 1);
         dir_close(cur_part, searched_record.parent_dir);
+    } else {
+        // 其余情况均为打开已存在文件 O_RDONLY, O_WRONLY, O_RDWR
+        fd = file_open(inode_no, flags);
     }
+
     // 此fd是指任务pcb->fd_table数组中的元素下标，并不是指全局file_table中的下标
     return fd;
+}
+
+/*将buf中连续count个字节写入文件描述符fd,
+成功则返回写入的字节数，失败返回-1*/
+int32 sys_write(int32 fd, const void *buf, uint32 count) {
+    if (fd < 0) {
+        printk("[%s] fd error: %d\n", __FUNCTION__, fd);
+        STOP
+        return -1;
+    }
+    if (fd == stdout_no) {
+        char tmp_buf[1024] = {0};
+        memcpy(tmp_buf, buf, count);
+        printk(tmp_buf);
+        return (int32) count;
+    }
+    uint32 _fd = get_current_task()->fd_table[fd];
+    file_t *wr_file = &file_table[_fd];
+
+    if (wr_file->fd_flag & O_WRONLY || wr_file->fd_flag & O_RDWR) {
+        int32 bytes_written = file_write(wr_file, buf, count);
+        return bytes_written;
+    }
+    printk("[%s] not allowed to write file without flag: %d\n", __FUNCTION__, wr_file->fd_flag);
+    STOP
+    return -1;
+}
+
+// 关闭文件描述符fd指向的文件，成功返回0, 否则返回-1
+int32 sys_close(int32 fd) {
+    if (fd < 3) return -1;
+    uint32 _fd = get_current_task()->fd_table[fd];
+    int32 ret = file_close(&file_table[_fd]);
+    get_current_task()->fd_table[fd] = STD_FREE_SLOT; // 使该文件描述符位可用
+    return ret;
 }

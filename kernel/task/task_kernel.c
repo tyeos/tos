@@ -34,9 +34,15 @@ void *kernel_task_ide(void *args) {
     printk("K_IDE start~\n");
     ide_init();
 
-    uint32 fd = sys_open("/file1", O_CREAT);
+    int32 fd = sys_open("/file1", O_CREAT);
+//    int32 fd = sys_open("/file1", O_RDWR);
+    printk("K_IDE open fd = %d\n", fd);
 
-    printk("K_IDE fd = %d\n", fd);
+    int32 cnt = sys_write(fd, "hello world ~\n", 13);
+    printk("K_IDE write cnt = %d\n", cnt);
+
+    int32 ret = sys_close(fd);
+    printk("K_IDE close ret = %d\n", ret);
 
 //    const uint32 page_count = 1;
 //    uint32 *pages[page_count];

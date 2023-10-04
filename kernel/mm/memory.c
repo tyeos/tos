@@ -19,7 +19,7 @@
 /*
  * 物理内存按页向外提供
  */
-#define PHYSICAL_MEM_BITMAP_ADDR 0x10000     // 内存分配对应的位图存储起始地址
+#define PHYSICAL_MEM_BITMAP_ADDR 0x40000     // 内存分配对应的位图存储起始地址
 memory_alloc_t g_physical_memory;
 
 void physical_memory_init() {

@@ -8,6 +8,7 @@
 #include "../../include/inode.h"
 #include "../../include/dir.h"
 #include "../../include/file.h"
+#include "../../include/sys.h"
 
 
 extern partition_t *cur_part;
@@ -43,6 +44,12 @@ dir_t *dir_open(partition_t *part, uint32 inode_no) {
  * @return 是否查找到了
  */
 bool search_dir_entry(partition_t *part, dir_t *pdir, const char *name, dir_entry_t *dir_e) {
+    if (!pdir->inode) {
+        printk("[%s] inode not available: [%s]!\n", __FUNCTION__, name);
+        STOP
+        return false;
+    }
+
     // 12个直接块 + 128个一级间接块 = 140块, 共560字节
     uint32 block_cnt = 140;         // 该目录下最多可查找多少个块
     uint32 block_bytes = 48 + 512;  // 这些块占用的内存大小

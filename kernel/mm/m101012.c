@@ -176,7 +176,7 @@
  * 所以，虚拟地址空间 0x100000~0x3FFFFF(用户) 及 0xC0100000~0xC03FFFFF(内核) 在未来可作为特殊只用，
  * 普通的虚拟地址空间分配将从 0x400000(用户) 或 0xC0400000(内核) 开始。
  */
-#define KERNEL_MEM_BITMAP_ADDR 0x30000                 // 内核内存池的位图存储位置
+#define KERNEL_MEM_BITMAP_ADDR 0x60000                 // 内核内存池的位图存储位置
 #define KERNEL_VIRTUAL_ALLOC_MEMORY_BASE 0xC0400000    // 内核的虚拟地址从哪里开始分配
 #define KERNEL_VIRTUAL_ALLOC_MEMORY_MAX_END 0xFFBFFFFF // 内核的虚拟地址最大支持从哪里结束分配
 

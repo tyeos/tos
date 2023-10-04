@@ -178,9 +178,7 @@ static task_t *create_task(char *name, uint8 priority, task_func_t func, bool is
     task->fd_table[0] = stdin_no;
     task->fd_table[1] = stdout_no;
     task->fd_table[2] = stderr_no;
-
-    // 其余的全置为-1, 表示该文件描述符可分配，为空位
-    for (uint8 fd_idx = 3; fd_idx < MAX_FILES_OPEN_PER_PROC; fd_idx++) task->fd_table[fd_idx] = -1;
+    for (uint8 fd_idx = 3; fd_idx < MAX_FILES_OPEN_PER_PROC; fd_idx++) task->fd_table[fd_idx] = STD_FREE_SLOT;
 
     if (!is_kernel) {
         // 用户进程有自己的页目录表
