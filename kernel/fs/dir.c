@@ -174,7 +174,8 @@ bool sync_dir_entry(dir_t *parent_dir, dir_entry_t *p_de, void *io_buf) {
 
             // 更新目录大小并返回结果
             dir_inode->i_size += dir_entry_size;
-            printk("[%s] [%s] save to [%d]!\n", __FUNCTION__, p_de->name, block_idx);
+            printk("[%s] [%s] save to [0x%x] [0x%x]!\n", __FUNCTION__, p_de->name, all_blocks[block_idx] << 9,
+                   block_idx);
             return true;
         }
 
@@ -197,7 +198,8 @@ bool sync_dir_entry(dir_t *parent_dir, dir_entry_t *p_de, void *io_buf) {
 
             // 更新目录大小并返回结果
             dir_inode->i_size += dir_entry_size;
-            printk("[%s] [%s] save to [%d: %d]!\n", __FUNCTION__, p_de->name, block_idx, dir_entry_idx);
+            printk("[%s] [%s] save to [0x%x: 0x%x] [0x%x: 0x%x]!\n", __FUNCTION__, p_de->name,
+                   all_blocks[block_idx] << 9, dir_entry_idx * dir_entry_size, block_idx, dir_entry_idx);
             return true;
         }
 

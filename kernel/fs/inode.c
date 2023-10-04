@@ -49,7 +49,7 @@ void inode_sync(partition_t *part, inode_t *inode, void *io_buf) {
     memcpy(((char *) io_buf + inode_pos.off_size), &pure_inode, sizeof(inode_t));
     ide_write(part->disk, inode_pos.sec_lba, io_buf, sec_cnt);
 
-    printk("[%s] [%d] save to [0x%x: %d]!\n", __FUNCTION__, inode->i_no, inode_pos.sec_lba << 9, inode_pos.off_size);
+    printk("[%s] [%d] save to [0x%x: 0x%x]!\n", __FUNCTION__, inode->i_no, inode_pos.sec_lba << 9, inode_pos.off_size);
 }
 
 /**

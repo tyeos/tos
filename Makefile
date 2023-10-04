@@ -91,7 +91,7 @@ clean_hd3:
 	$(shell rm -f $(BUILD_HD3_IMG))
 
 read_hex:
-	xxd -a -u -g 1 -s 0x100800 -l 512 $(BUILD_HD2_IMG)
+	xxd -a -u -g 1 -s 0x152600 -l 512 $(BUILD_HD1_IMG)
 
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	gcc $(CFLAGS) $(DEBUG) -c $< -o $@
