@@ -7,6 +7,50 @@
 #include "../../include/print.h"
 #include "../../include/string.h"
 #include "../../include/sys.h"
+#include "../../include/dir.h"
+#include "../../include/file.h"
+
+extern dir_t root_dir;
+extern file_t *file_table;
+
+partition_t *cur_part; // 当前挂载的分区
+
+/*
+ * 挂载指定分区
+ */
+static void mount_partition(partition_t *part) {
+    disk_t *disk = part->disk;
+
+    // 从硬盘上读入的超级块
+    super_block_t *sb_buf = (super_block_t *) kmalloc(SECTOR_SIZE);
+    memset(sb_buf, 0, SECTOR_SIZE);
+    ide_read(disk, part->start_lba + 1, sb_buf, 1);
+
+    // 复制到内存分区的超级块
+    part->sb = (super_block_t *) kmalloc(sizeof(super_block_t));
+    memcpy(part->sb, sb_buf, sizeof(super_block_t));
+
+    // 将硬盘上的块位图读入到内存分区（块位图比较大，这里就按页申请了）
+    part->block_bitmap.map = alloc_kernel_pages((sb_buf->block_bitmap_sects + 7) >> 3);
+    ide_read(disk, sb_buf->block_bitmap_lba, part->block_bitmap.map, sb_buf->block_bitmap_sects);
+    // 初始化位图
+    part->block_bitmap.total = sb_buf->data_sects;
+    bitmap_slow_init(&part->block_bitmap);
+
+    // 将硬盘上的inode位图读入到内存分区（inode位图目前设计是1占个扇区）
+    part->inode_bitmap.map = kmalloc(sb_buf->inode_bitmap_sects * SECTOR_SIZE);
+    ide_read(disk, sb_buf->inode_bitmap_lba, part->inode_bitmap.map, sb_buf->inode_bitmap_sects);
+    // 初始化位图
+    part->inode_bitmap.total = sb_buf->inode_bitmap_sects * SECTOR_SIZE;
+    bitmap_slow_init(&part->inode_bitmap);
+
+    // 初始化分区队列
+    chain_init(&part->open_inodes);
+
+    // 更新当前挂载分区
+    cur_part = part;
+    printk("mount %s done!\n", part->name);
+}
 
 
 /*
@@ -25,16 +69,39 @@
  * ------------------------------------------------
  */
 static void partition_format(partition_t *part) {
-    uint32 boot_sector_sects = 1;   // MBR占一个扇区
-    uint32 super_block_sects = 1;   // 超级块占一个扇区
-    uint32 inode_bitmap_sects = DIV_ROUND_UP(MAX_FILES_PER_PART, BITS_PER_SECTOR);              // inode位图目前占1个扇区数
-    uint32 inode_table_sects = DIV_ROUND_UP(sizeof(inode_t) * MAX_FILES_PER_PART, SECTOR_SIZE); // 达到文件创建上限的占用扇区数
+    // 引导块 和 超级块 各占一个扇区
+    uint32 boot_sector_sects = 1;
+    uint32 super_block_sects = 1;
 
-    uint32 used_sects = boot_sector_sects + super_block_sects + inode_bitmap_sects + inode_table_sects; // 目前已使用的扇区
-    uint32 free_sects = part->sec_cnt - used_sects;          // 目前空闲的扇区
-    // 有种情况会使实际使用扇区比总扇区数少1个，即空闲块位图的最后一bit管理的刚好是倒数第二个空闲扇区，若再多管理一个空闲扇区就得给空闲块位图再分配一个扇区，所以最后一个扇区只能放弃不用
-    free_sects -= DIV_ROUND_UP(free_sects, BITS_PER_SECTOR); // 更新: 目前空闲的扇区, 去掉闲块位图占的空间再计算一次
-    uint32 block_bitmap_sects = DIV_ROUND_UP(free_sects, BITS_PER_SECTOR); // 管理空闲块的位图需要占用的扇区数（先算缩减的空闲扇区）
+    // 先计算 inode位图 和 inode数组 占用的扇区数
+    uint32 inode_bitmap_sects = DIV_ROUND_UP(MAX_FILES_PER_PART, BITS_PER_SECTOR);
+    uint32 inode_table_sects = DIV_ROUND_UP(sizeof(inode_t) * MAX_FILES_PER_PART, SECTOR_SIZE);
+
+    /*
+     * 再计算 空闲块位图 和 空闲块 占用的扇区数:
+     *      目前只剩下这两个的扇区数没有确定，假设总扇区数 去掉上面四个已经确定的块占用的扇区数后 剩余的扇区数为 rest_sects,
+     *      那么 空闲块位图占用的扇区数(block_bitmap_sects) 和 空闲块占用的扇区数(free_sects) 有以下关系：
+     *          block_bitmap_sects * 4096 - (0~4096) = free_sects;
+     *          block_bitmap_sects + free_sects = rest_sects;
+     *      相当于：
+     *          空闲块位图 只要多占用一个扇区就可以多管理 512*8=4096个 空闲块。
+     *          这里约定，扇区优先分配给 空闲块位图，因为它负责管理分配，没有它那 空闲块 就无法分配。
+     *          所以，一个扇区的空闲块位图 可管理0~4096个 空闲块，
+     *          即完全分配后若只剩下一个扇区时，那么分配给 空闲块位图, 这时候已经没有可管理的空闲块，这个扇区只能被空置。
+     *      例如：
+     *          若 rest_sects=1,        那么 block_bitmap_sects=1, free_sects=0,
+     *          若 rest_sects=2~4097,   那么 block_bitmap_sects=1, free_sects=1~4096,
+     *          若 rest_sects=4098,     那么 block_bitmap_sects=2, free_sects=4096,
+     *          若 rest_sects=4099~8194,那么 block_bitmap_sects=2, free_sects=4097~8192,
+     *          若 rest_sects=8195,     那么 block_bitmap_sects=3, free_sects=8192,
+     *          ... 以此类推 ...
+     *      所以：
+     *          block_bitmap_sects = (rest_sects + 4096) / 4097
+     *          free_sects = rest_sects - block_bitmap_sects
+     */
+    uint32 rest_sects = part->sec_cnt - boot_sector_sects - super_block_sects - inode_bitmap_sects - inode_table_sects;
+    uint32 block_bitmap_sects = (rest_sects + BITS_PER_SECTOR) / (BITS_PER_SECTOR + 1);
+    uint32 free_sects = rest_sects - block_bitmap_sects;
 
     // 超级块初始化
     super_block_t sb;
@@ -43,7 +110,7 @@ static void partition_format(partition_t *part) {
     sb.inode_cnt = MAX_FILES_PER_PART;
     sb.part_lba_base = part->start_lba;
 
-    sb.block_bitmap_lba = sb.part_lba_base + 2; // 第0块是引导块，第1块是超级块，之后是空闲块位图
+    sb.block_bitmap_lba = sb.part_lba_base + boot_sector_sects + super_block_sects;
     sb.block_bitmap_sects = block_bitmap_sects;
 
     sb.inode_bitmap_lba = sb.block_bitmap_lba + sb.block_bitmap_sects;
@@ -80,17 +147,17 @@ static void partition_format(partition_t *part) {
     // ---------- 0扇区为引导扇区（占1个扇区） ----------
 
     // ---------- 1扇区为超级块（占1个扇区） ----------
-    ide_write(hd, part->start_lba + 1, &sb, 1);
-    printk("[%s] %s write super block: 0x%x\n", __FUNCTION__, part->name, (part->start_lba + 1) << 9);
+    uint32 super_block_lba = part->start_lba + 1;
+    ide_write(hd, super_block_lba, &sb, super_block_sects);
+    printk("[%s] %s write super block: 0x%x\n", __FUNCTION__, part->name, super_block_lba << 9);
 
     // ---------- 2扇区开始为空闲块位图（占多个扇区）----------
 
     /*
-     * 1bit管理1扇区, 1个page的bit可以管理8<<12个扇区，
-     * 1扇区512字节，即1个page可管理 1<<24字节 = 8MB 硬盘空间
-     * 一般空闲空间都是8MB的很多倍（排除测试时分配小内存的情况）,
-     * 除了空闲块位图，后面还需要给 inode位图、inode数组 初始化，也是同理，inode数组占用也很大，估计要几百个扇区，
-     * 所以这里需要申请多页内存给空闲块位图做临时存储缓冲区, 所以这里按最大的申请一次临时共用即可。
+     * 1个Page相当于8个扇区，所以1个Page的位图可以管理8*4096个块，即16MB硬盘空间，所以 空闲块位图 一般都是占多页，
+     * inode数组更大，目前文件上限数是4096, 即inode_t结构占用多少个字节，inode数组就需要占用多少页内存，
+     * 下面要给 空闲块位图、inode位图、inode数组 初始化，所以需要用临时内存将数据写到磁盘，
+     * 这里就按最大的申请一个临时共用做临时存储缓冲区。
      */
     uint32 max_sects = sb.block_bitmap_sects > sb.inode_table_sects ? sb.block_bitmap_sects : sb.inode_table_sects;
     max_sects = max_sects > sb.inode_bitmap_sects ? max_sects : sb.inode_bitmap_sects;
@@ -100,21 +167,8 @@ static void partition_format(partition_t *part) {
     // 初始化块位图
     memset(buf, 0, sb.block_bitmap_sects << 9);
     buf[0] |= 0b1; // 第0个块预留给根目录，位图中先占位
-
-//    uint32 block_bitmap_last_byte = free_sects / 8;
-//    uint8 block_bitmap_last_bit = free_sects % 8;
-//    uint32 last_size = SECTOR_SIZE - (block_bitmap_last_byte % SECTOR_SIZE);
-//    // last_size是位图所在最后一个扇区中，不足一扇区的其余部分
-//    // 1 先将位图最后一字节到其所在的扇区的结束全置为1, 即超出实际块数的部分直接置为已占用
-//    memset(&buf[block_bitmap_last_byte], 0xff, last_size);
-//    // 2 再将上一步中覆盖的最后一字节内的有效位重新置0
-//    uint8 bit_idx = 0;
-//    while (bit_idx <= block_bitmap_last_bit) {
-//        buf[block_bitmap_last_byte] &= ~(1 << bit_idx++);
-//    }
     ide_write(hd, sb.block_bitmap_lba, buf, sb.block_bitmap_sects);
     printk("[%s] %s write block bitmap: 0x%x\n", __FUNCTION__, part->name, sb.block_bitmap_lba << 9);
-
 
     // ---------- inode位图（可占多个扇区，目前设计是占1个扇区）----------
     memset(buf, 0, sb.inode_bitmap_sects << 9);
@@ -122,33 +176,31 @@ static void partition_format(partition_t *part) {
     ide_write(hd, sb.inode_bitmap_lba, buf, sb.inode_bitmap_sects);
     printk("[%s] %s write inode bitmap: 0x%x\n", __FUNCTION__, part->name, sb.inode_bitmap_lba << 9);
 
-
     // ---------- inode数组（占多个扇区）----------
     memset(buf, 0, sb.inode_table_sects << 9);
     // 先写inode_table中的第0项，即根目录所在的inode
     inode_t *i = (inode_t *) buf;
-    i->i_size = sb.dir_entry_size * 2;   // .和..
-    i->i_no = 0;                         // 根目录占inode数组中第0个inode
-    i->i_sectors[0] = sb.data_start_lba; // 指向空闲区起始位置，i_sectors数组的其他元素目前都为0
+    i->i_no = 0;                             // 根目录占inode数组中第0个inode
+    i->i_size = sb.dir_entry_size * 2;       // 根目录下初始有两个目录项 .和..
+    i->direct_blocks[0] = sb.data_start_lba; // 指向空闲区起始位置，i_sectors数组的其他元素目前都为0
     ide_write(hd, sb.inode_table_lba, buf, sb.inode_table_sects);
     printk("[%s] %s write inode table: 0x%x\n", __FUNCTION__, part->name, sb.inode_table_lba << 9);
-
 
     // ---------- 根目录（占1个扇区）----------
 
     // 写入根目录的两个目录项.和..
-    memset(buf, 0, SECTOR_SIZE);
+    memset(buf, 0, SECTOR_SIZE); // 等会要以扇区为单位写盘
     dir_entry_t *p_de = (dir_entry_t *) buf;
 
     // 初始化当前目录"."
-    memcpy(p_de->filename, ".", 1);
     p_de->i_no = 0;
+    memcpy(p_de->name, ".", 1);
     p_de->f_type = FT_DIRECTORY;
-    p_de++;
 
     // 初始化当前目录父目录".."
-    memcpy(p_de->filename, "..", 2);
-    p_de->i_no = 0; //根目录的父目录依然是根目录自己
+    p_de++;
+    p_de->i_no = 0; // 根目录的父目录依然是根目录自己
+    memcpy(p_de->name, "..", 2);
     p_de->f_type = FT_DIRECTORY;
 
     // 根目录分配在空闲数据区的起始位置，这里保存根目录的目录项
@@ -158,8 +210,9 @@ static void partition_format(partition_t *part) {
     free_kernel_pages(buf, alloc_pages);
 }
 
-/*
+/**
  * 检查分区是否安装了文件系统，若未安装，则进行格式化分区，创建文件系统
+ * @param partitions 要检查的分区列表
  */
 void file_sys_init(chain_t *partitions) {
     printk("[%s] searching %d partitions...\n", __FUNCTION__, partitions->size);
@@ -182,4 +235,164 @@ void file_sys_init(chain_t *partitions) {
         partition_format(part);
     }
     kmfree_s(sb_buf, SECTOR_SIZE);
+
+    // 挂载分区（这里挂第一个分区了）
+    mount_partition(chain_read_first(partitions)->value);
+
+    // 将当前分区的根目录打开
+    open_root_dir(cur_part);
+    // 初始化文件表
+    uint32 fd_idx = 0;
+    while (fd_idx < MAX_FILE_OPEN) {
+        file_table[fd_idx++].fd_inode = NULL;
+    }
+}
+
+
+/**
+ * 解析最上层路径的名称
+ * @param pathname 要解析的路径，如"/a/b/c"
+ * @param name_store 存于存储最上层路径的名称，如"/a/b/c"最终会存入"a"
+ * @return 未解析的路径，，如"/a/b/c"最终会返回"/b/c"
+ */
+// 将最上层路径名称解析出来
+static char *path_parse(char *pathname, char *name_store) {
+    // 先处理最前面的斜杠, 包括连续的, 如"///a/b"会处理成"a/b"
+    if (pathname[0] == '/') while (*(++pathname) == '/');
+    // 开始一般的路径解析
+    while (*pathname != '/' && *pathname != EOS) *name_store++ = *pathname++;
+    return pathname[0] ? pathname : NULL; // 若路径字符串为空，则返回NULL
+}
+
+/**
+ * 计算路径深度
+ * @param pathname 要计算的路径
+ * @return 路径深度，说白了就是能解析出几个有效文件或目录名称，如/a/b/c/, 深度为3
+ */
+uint32 path_depth_cnt(char *pathname) {
+    char name[MAX_FILE_NAME_LEN]; // 用于path parse的参数做路径解析
+    uint32 depth = 0;
+    while (pathname) {
+        memset(name, 0, MAX_FILE_NAME_LEN);
+        pathname = path_parse(pathname, name);
+        if (!name[0]) break;
+        depth++;
+    }
+    return depth;
+}
+
+// 搜索文件pathname,若找到则返回其inode号，否则返回-1
+/**
+ * 搜索文件
+ * @param pathname 要搜索的文件路径
+ * @param searched_record 用于存储搜索记录
+ * @return 若找到则返回其inode编号，否则返回 ERR_IDX
+ */
+static uint32 search_file(const char *pathname, path_search_record_t *searched_record) {
+    // 若是这三种类型的任意一种，说明是根目录，直接返回
+    if (!strcmp(pathname, "/") || !strcmp(pathname, "/.") || !strcmp(pathname, "/..")) {
+        searched_record->parent_dir = &root_dir;
+        searched_record->file_type = FT_DIRECTORY;
+        searched_record->searched_path[0] = 0;      // 搜索路径置空
+        return 0;
+    }
+
+    // 按层级解析目录
+    searched_record->parent_dir = &root_dir; // 父目录默认指向根目录，找到一级更新一次
+    dir_entry_t dir_e;                       // 临时存储各级目录项
+    char name[MAX_FILE_NAME_LEN] = {0};      // 临时记录各级名称
+
+    // 只要当前路径正常解析出名称，就继续
+    for (char *sub_path = path_parse((char *) pathname, name); name[0]; sub_path = path_parse(sub_path, name)) {
+        // 将已解析的内容存到搜索记录中
+        strcat(searched_record->searched_path, "/");
+        strcat(searched_record->searched_path, name);
+
+        // 在目录中查找目录项，若找不到，则返回-1（这时候parent_dir暂不关闭，因为下一步一般就是创建）
+        if (!search_dir_entry(cur_part, searched_record->parent_dir, name, &dir_e)) return ERR_IDX;
+
+        // 如果找到了普通文件，就直接返回
+        if (FT_REGULAR == dir_e.f_type) {
+            searched_record->file_type = FT_REGULAR;
+            return dir_e.i_no;
+        }
+
+        // 否则就是目录（暂不考虑未知类型）
+        dir_close(searched_record->parent_dir);                                 // 关闭已查找的目录
+        searched_record->parent_dir = dir_open(cur_part, dir_e.i_no); // 更新父目录到当前目录
+
+        // 如果没有可解析的下级目录(或普通文件)了，那要的就是这个目录，到此结束
+        if (!sub_path) break; // 这里考虑目录最后可能是以斜杠结尾，所以在最后统一返回
+        // 还没解析完，就继续找
+        memset(name, 0, MAX_FILE_NAME_LEN);
+    }
+
+    // 到这里就说明是目录了，没找到文件
+    searched_record->file_type = FT_DIRECTORY;
+    return dir_e.i_no;
+}
+
+
+/**
+ * 打开或创建普通文件
+ * @param pathname 普通文件路径
+ * @param flags 枚举, oflags
+ * @return 成功返回文件描述符，否则返回-1
+ */
+// 打开或创建文件成功后，返回文件描述符，否则返回-1
+int32 sys_open(const char *pathname, uint8 flags) {
+    // 这里只支持普通文件的打开，对于目录要用dir_open
+    if (pathname[strlen(pathname) - 1] == '/') {
+        printk("[%s] can't open a directory: %s\n", __FUNCTION__, pathname);
+        STOP
+        return -1;
+    }
+
+    // 查找文件
+    path_search_record_t searched_record;
+    memset(&searched_record, 0, sizeof(path_search_record_t));
+    uint32 inode_no = search_file(pathname, &searched_record);
+    // 不管有没有找到，首先要确保找的结果不是目录
+    if (searched_record.file_type == FT_DIRECTORY) {
+        printk("[%s] found unsupported directory: %s\n", __FUNCTION__, pathname);
+        dir_close(searched_record.parent_dir);
+        STOP
+        return -1;
+    }
+
+    // 其次，已搜索的层级要是最后一级
+    uint32 pathname_depth = path_depth_cnt((char *) pathname);
+    uint32 path_searched_depth = path_depth_cnt(searched_record.searched_path);
+    if (pathname_depth != path_searched_depth) {
+        // 说明并没有访问到全部的路径，某个中间目录是不存在的
+        printk("[%s] parent directory [%s] does not exist: %s\n", __FUNCTION__, searched_record.searched_path,
+               pathname);
+        dir_close(searched_record.parent_dir);
+        return -1;
+    }
+
+    bool found = inode_no != (uint32) ERR_IDX ? true : false;
+
+    // 如果文件存在，不可重复创建
+    if (found && (flags & O_CREAT)) {
+        printk("[%s] %s has already exist ~\n", __FUNCTION__, pathname);
+        dir_close(searched_record.parent_dir);
+        return -1;
+    }
+    // 如果文件不存在，必须先创建
+    if (!found && !(flags & O_CREAT)) {
+        printk("[%s] %s does‘t exist ~\n", __FUNCTION__, pathname);
+        dir_close(searched_record.parent_dir);
+        return -1;
+    }
+
+    // 其他情况正常给数据
+    int32 fd = -1;
+    if (flags & O_CREAT) { // 创建文件
+        printk("[%s] [%s] creating ~\n", __FUNCTION__, pathname);
+        fd = file_create(searched_record.parent_dir, (strrchr(searched_record.searched_path, '/') + 1));
+        dir_close(searched_record.parent_dir);
+    }
+    // 此fd是指任务pcb->fd_table数组中的元素下标，并不是指全局file_table中的下标
+    return fd;
 }

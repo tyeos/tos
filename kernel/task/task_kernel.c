@@ -34,6 +34,10 @@ void *kernel_task_ide(void *args) {
     printk("K_IDE start~\n");
     ide_init();
 
+    uint32 fd = sys_open("/file1", O_CREAT);
+
+    printk("K_IDE fd = %d\n", fd);
+
 //    const uint32 page_count = 1;
 //    uint32 *pages[page_count];
 //    for (int i = 0; i < page_count; ++i) {

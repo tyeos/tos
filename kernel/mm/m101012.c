@@ -696,7 +696,12 @@ void process_destroy(task_t *task) {
     if (OPEN_MEMORY_LOG) printk("===============================================================================\n\n");
 }
 
-// 分配连续多个虚拟页, 并自动挂载物理页
+/**
+ * 分配连续多个虚拟页, 并自动挂载物理页（为简化开发逻辑，调用者可以不考虑内存申请失败的情况，如果内存申请失败，程序内部暂停，可进行问题排查）
+ * @param pf 内存池类型，内核还是用户
+ * @param no 申请几个page
+ * @return 分配地址
+ */
 static void *_alloc_pages(enum pool_flags pf, uint32 no) {
     if (OPEN_MEMORY_LOG) printk("\n------------------------- alloc page begin ------------------------------\n");
     // 申请连续的多个虚拟页

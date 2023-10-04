@@ -8,6 +8,8 @@
 #include "mm.h"
 #include "chain.h"
 
+#define MAX_FILES_OPEN_PER_PROC 8 // 每个任务可以打开的文件数上限
+
 typedef void *(*task_func_t)(void *);
 
 /*进程或线程的状态*/
@@ -160,6 +162,9 @@ typedef struct task_t {
     uint8 ticks;                     // 占用CPU的时间滴答数（用中断次数表示，初始值为优先级）
     uint8 priority;                  // 任务优先级，值越大级别越高
     char name[16];                   // 线程名称
+
+    int32 fd_table[MAX_FILES_OPEN_PER_PROC];    // 文件描述符数组
+
 } __attribute__((packed)) task_t;
 
 void task_init();
@@ -169,6 +174,7 @@ uint32 exit_current_task();
 
 uint32 get_current_task_pid();
 uint32 get_running_task_no();
+task_t *get_current_task();
 
 task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func);
 task_t *create_user_process(char *name, uint8 priority, task_func_t func);

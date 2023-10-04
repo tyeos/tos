@@ -66,7 +66,6 @@ static chain_elem_pool_t elem_pool;
 static task_t *idle_task;
 task_t *current_task = NULL;
 
-
 /*
  * 进行一次任务调度滴答，执行完成current_task即更新
  */
@@ -102,9 +101,13 @@ void task_scheduler_ticks() {
         return;
     }
 
-    // 所有任务都不可用
-    printk("[%s] all task waiting [idle state: %d] ~ \n", __FUNCTION__, idle_task->state);
-    STOP
+    // 所有任务都不可用，看idle任务是否还在
+    if (idle_task) {
+        printk("[%s] all task waiting [idle state: %d] ~ \n", __FUNCTION__, idle_task->state);
+        STOP
+    }
+
+    // 其他情况说明idle任务还没启动，或已经退出了
 }
 
 static void clear_task(task_t *task) {
@@ -151,7 +154,11 @@ uint32 get_running_task_no() {
     return tasks.size;
 }
 
-task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func) {
+task_t *get_current_task() {
+    return current_task;
+}
+
+static task_t *create_task(char *name, uint8 priority, task_func_t func, bool is_kernel) {
     // 创建任务
     task_t *task = alloc_kernel_page();
     memset(task, 0, PAGE_SIZE);
@@ -166,6 +173,21 @@ task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func) {
     task->ticks = priority;
     task->priority = priority;
     strcpy(task->name, name);
+
+    // 预留标准输入输出
+    task->fd_table[0] = stdin_no;
+    task->fd_table[1] = stdout_no;
+    task->fd_table[2] = stderr_no;
+
+    // 其余的全置为-1, 表示该文件描述符可分配，为空位
+    for (uint8 fd_idx = 3; fd_idx < MAX_FILES_OPEN_PER_PROC; fd_idx++) task->fd_table[fd_idx] = -1;
+
+    if (!is_kernel) {
+        // 用户进程有自己的页目录表
+        task->pgdir = create_virtual_page_dir();
+        // 虚拟地址池初始化
+        user_virtual_memory_alloc_init(&task->user_vaddr_alloc);
+    }
 
     // 添加到任务队列末尾
     chain_elem_t *elem = chain_pool_getv(&elem_pool, task);
@@ -174,32 +196,12 @@ task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func) {
     return task;
 }
 
+task_t *create_kernel_thread(char *name, uint8 priority, task_func_t func) {
+    return create_task(name, priority, func, true);
+}
+
 task_t *create_user_process(char *name, uint8 priority, task_func_t func) {
-    // 创建任务
-    task_t *task = alloc_kernel_page();
-    memset(task, 0, PAGE_SIZE);
-
-    // task初始化
-    task->pid = bitmap_alloc(&pids);
-    task->func = func;
-    task->elapsed_ticks = 0;
-    task->kstack = (uint32) task + PAGE_SIZE;
-
-    task->state = TASK_READY;
-    task->ticks = priority;
-    task->priority = priority;
-    strcpy(task->name, name);
-
-    // 用户进程有自己的页目录表
-    task->pgdir = create_virtual_page_dir();
-    // 虚拟地址池初始化
-    user_virtual_memory_alloc_init(&task->user_vaddr_alloc);
-
-    // 添加到任务队列末尾
-    chain_elem_t *elem = chain_pool_getv(&elem_pool, task);
-    task->chain_elem = elem;
-    chain_put_last(&tasks, elem);
-    return task;
+    return create_task(name, priority, func, false);
 }
 
 
