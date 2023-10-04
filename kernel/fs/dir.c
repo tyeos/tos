@@ -4,11 +4,10 @@
 
 #include "../../include/ide.h"
 #include "../../include/print.h"
-#include "../../include/io.h"
 #include "../../include/string.h"
-#include "../../include/eflags.h"
-#include "../../include/fs.h"
 #include "../../include/inode.h"
+#include "../../include/dir.h"
+#include "../../include/file.h"
 
 
 extern partition_t *cur_part;
@@ -101,10 +100,10 @@ bool search_dir_entry(partition_t *part, dir_t *pdir, const char *name, dir_entr
  * 关闭目录
  * @param dir 关闭哪个目录
  */
-void dir_close(dir_t *dir) {
+void dir_close(partition_t *part, dir_t *dir) {
     // 根目录不能关闭
     if (dir == &root_dir) return;
-    inode_close(dir->inode);
+    inode_close(part, dir->inode);
     kmfree_s(dir, sizeof(dir_t));
 }
 

@@ -318,7 +318,7 @@ static uint32 search_file(const char *pathname, path_search_record_t *searched_r
         }
 
         // 否则就是目录（暂不考虑未知类型）
-        dir_close(searched_record->parent_dir);                                 // 关闭已查找的目录
+        dir_close(cur_part, searched_record->parent_dir);                                 // 关闭已查找的目录
         searched_record->parent_dir = dir_open(cur_part, dir_e.i_no); // 更新父目录到当前目录
 
         // 如果没有可解析的下级目录(或普通文件)了，那要的就是这个目录，到此结束
@@ -355,7 +355,7 @@ int32 sys_open(const char *pathname, uint8 flags) {
     // 不管有没有找到，首先要确保找的结果不是目录
     if (searched_record.file_type == FT_DIRECTORY) {
         printk("[%s] found unsupported directory: %s\n", __FUNCTION__, pathname);
-        dir_close(searched_record.parent_dir);
+        dir_close(cur_part, searched_record.parent_dir);
         STOP
         return -1;
     }
@@ -367,7 +367,7 @@ int32 sys_open(const char *pathname, uint8 flags) {
         // 说明并没有访问到全部的路径，某个中间目录是不存在的
         printk("[%s] parent directory [%s] does not exist: %s\n", __FUNCTION__, searched_record.searched_path,
                pathname);
-        dir_close(searched_record.parent_dir);
+        dir_close(cur_part, searched_record.parent_dir);
         return -1;
     }
 
@@ -376,13 +376,13 @@ int32 sys_open(const char *pathname, uint8 flags) {
     // 如果文件存在，不可重复创建
     if (found && (flags & O_CREAT)) {
         printk("[%s] %s has already exist ~\n", __FUNCTION__, pathname);
-        dir_close(searched_record.parent_dir);
+        dir_close(cur_part, searched_record.parent_dir);
         return -1;
     }
     // 如果文件不存在，必须先创建
     if (!found && !(flags & O_CREAT)) {
         printk("[%s] %s does‘t exist ~\n", __FUNCTION__, pathname);
-        dir_close(searched_record.parent_dir);
+        dir_close(cur_part, searched_record.parent_dir);
         return -1;
     }
 
@@ -391,7 +391,7 @@ int32 sys_open(const char *pathname, uint8 flags) {
     if (flags & O_CREAT) { // 创建文件
         printk("[%s] [%s] creating ~\n", __FUNCTION__, pathname);
         fd = file_create(searched_record.parent_dir, (strrchr(searched_record.searched_path, '/') + 1));
-        dir_close(searched_record.parent_dir);
+        dir_close(cur_part, searched_record.parent_dir);
     }
     // 此fd是指任务pcb->fd_table数组中的元素下标，并不是指全局file_table中的下标
     return fd;

@@ -5,10 +5,10 @@
 
 #include "../../include/ide.h"
 #include "../../include/print.h"
-#include "../../include/io.h"
 #include "../../include/string.h"
 #include "../../include/eflags.h"
-#include "../../include/fs.h"
+#include "../../include/inode.h"
+#include "../../include/dir.h"
 
 
 extern task_t *current_task;

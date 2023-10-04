@@ -15,7 +15,7 @@ dir_t *dir_open(partition_t *part, uint32 inode_no);
 
 bool search_dir_entry(partition_t *part, dir_t *pdir, const char *name, dir_entry_t *dir_e);
 
-void dir_close(dir_t *dir);
+void dir_close(partition_t *part, dir_t *dir);
 
 void create_dir_entry(char *filename, uint32 inode_no, uint8 file_type, dir_entry_t *p_de);
 
