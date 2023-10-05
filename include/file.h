@@ -15,11 +15,15 @@ int32 pcb_fd_install(int32 global_fd_idx);
 
 uint32 inode_bitmap_alloc(partition_t *part);
 
+void inode_bitmap_free(partition_t *part, uint32 inode_no);
+
 uint32 block_bitmap_alloc(partition_t *part);
+
+void block_bitmap_free(partition_t *part, uint32 block_lba);
 
 void bitmap_sync(partition_t *part, uint32 bit_idx, enum bitmap_type btmp);
 
-int32 file_create(dir_t *parent_dir, char *filename);
+int32 file_create(dir_t *parent_dir, char *filename, uint8 flag);
 
 int32 file_open(uint32 inode_no, uint8 flag);
 

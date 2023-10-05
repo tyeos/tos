@@ -17,4 +17,6 @@ void inode_close(partition_t *part, inode_t *inode);
 
 void inode_init(uint32 inode_no, inode_t *new_inode);
 
+void inode_release(partition_t *part, uint32 inode_no);
+
 #endif //TOS_INODE_H

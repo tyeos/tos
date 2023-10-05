@@ -161,7 +161,7 @@ bool sync_dir_entry(dir_t *parent_dir, dir_entry_t *p_de, void *io_buf) {
             } else {
                 // 间接块逻辑
                 if (block_idx == 12) {
-                    // 间接块未创建, 需要先创建间接块, 申请块地址, 同步块位图, 并同步到父目录inode内存
+                    // 间接表块未创建, 需要先创建间接表块, 申请块地址, 同步块位图, 并同步到父目录inode内存
                     uint32 block_lba = block_bitmap_alloc(cur_part);
                     bitmap_sync(cur_part, block_lba - cur_part->sb->data_start_lba, BLOCK_BITMAP);
                     dir_inode->indirect_block = block_lba;
@@ -217,4 +217,124 @@ bool sync_dir_entry(dir_t *parent_dir, dir_entry_t *p_de, void *io_buf) {
     printk("[%s] directory is full!\n", __FUNCTION__);
 
     return false;
+}
+
+/**
+ * 删除指定目录中的指定目录项
+ * @param part 所属分区
+ * @param pdir 所属目录
+ * @param inode_no 目录项对应的inode编号
+ * @param io_buf 临时缓冲区
+ * @return 是否删除成功
+ */
+bool delete_dir_entry(partition_t *part, dir_t *pdir, uint32 inode_no, void *io_buf) {
+
+    // 1, 先收集要扫描的全部块地址
+
+    inode_t *dir_inode = pdir->inode;
+    uint32 all_blocks[140] = {0};
+    for (uint8 block_idx = 0; block_idx < 12; ++block_idx) {
+        all_blocks[block_idx] = dir_inode->direct_blocks[block_idx];
+    }
+    if (dir_inode->indirect_block) {
+        ide_read(part->disk, dir_inode->indirect_block, all_blocks + 12, 1);
+    }
+
+    // 2，遍历所有块 遍历每个块中的所有目录项
+    // 2.1, 找的过程中需要记录: 目录项所在块 该块存放的的普通目录项个数 是否是首块
+
+    uint32 dir_entry_size = part->sb->dir_entry_size;    // 1个目录项占用的字节数
+    uint32 dir_entry_cnt = SECTOR_SIZE / dir_entry_size; // 1个扇区中存放的目录项的最大个数（目录项不跨扇区）
+
+    dir_entry_t *dir_entry_found = NULL; // 最终找到的目录项
+    uint8 block_idx;                     // 该目录项所在的块
+    bool is_dir_first_block = false;     // 该块 是否是存放"."目录项 的块
+    uint32 block_dir_found_count = 0;    // 该块 一共有多少常规目录项
+
+    dir_entry_t *p_de = (dir_entry_t *) io_buf; // 临时记录块中的每一个目录项
+    for (block_idx = 0; block_idx < 140; ++block_idx) {
+        // 先看该块是否有数据，没有就下一个
+        if (all_blocks[block_idx] == 0) {
+            block_idx++;
+            continue;
+        }
+        // 先初始化准备读一块数据
+        is_dir_first_block = false;
+        block_dir_found_count = 0;
+        memset(io_buf, 0, SECTOR_SIZE);
+        ide_read(part->disk, all_blocks[block_idx], io_buf, 1);
+
+        for (uint32 dir_entry_idx = 0; dir_entry_idx < dir_entry_cnt; dir_entry_idx++) {
+            // 先要确定文件类型
+            if (p_de->f_type == FT_UNKNOWN) continue;
+
+            // 再看是否是 "." 和 ".."
+            if (!strcmp(p_de[dir_entry_idx].name, "..")) continue;
+            if (!strcmp(p_de[dir_entry_idx].name, ".")) {
+                is_dir_first_block = true;
+                continue;
+            }
+
+            // 其他情况就是找到常规目录项了，先计数
+            block_dir_found_count++;
+
+            // 找到了要删除的目录项
+            if (p_de[dir_entry_idx].i_no == inode_no) {
+                dir_entry_found = p_de + dir_entry_idx;
+                // 这里不结束，要将这个块遍历完，看有多少目录项
+            }
+        }
+
+        if (dir_entry_found) break; // 在这个块中找到了，结束
+
+        // 继续找下一个块，目录项指针初始化
+        p_de = (dir_entry_t *) io_buf;
+    }
+
+    if (!dir_entry_found) return false; // 没找到，一般是已经被清除过了
+
+    // 3，从块中删除找到的目录项 如果块中只有这一项则直接删除块 如果删除的块是间接表的唯一块则删除间接表
+
+    bool is_del_block = !is_dir_first_block && block_dir_found_count == 1; // 是否直接删除块
+    bool is_del_indirect_table = false;                                    // 是否要删除间接表
+    if (is_del_block && block_idx >= 12) {
+        uint8 indirect_block_found_cnt = 0;
+        for (uint8 i = 12; i < 140; ++i) {
+            if (all_blocks[i]) indirect_block_found_cnt++;
+            if (indirect_block_found_cnt > 1) break;
+        }
+        is_del_indirect_table = indirect_block_found_cnt == 1;
+    }
+
+    // 删除块的逻辑
+    if (is_del_block) {
+        // 先释放位图空间，并同步到硬盘
+        block_bitmap_free(part, all_blocks[block_idx]);
+        bitmap_sync(part, all_blocks[block_idx] - part->sb->data_start_lba, BLOCK_BITMAP);
+        // 如果是直接块需要同步到节点
+        if (block_idx < 12) {
+            dir_inode->direct_blocks[block_idx] = 0;
+        } else if (!is_del_indirect_table) { // 如果是间接块被删了，需要同步到间接表（前提是间接表不被删的情况下）
+            all_blocks[block_idx] = 0;
+            ide_write(part->disk, dir_inode->indirect_block, all_blocks + 12, 1);
+        }
+    } else {
+        // 如果不是按块删除，那就是删除目录项的逻辑
+        memset(dir_entry_found, 0, dir_entry_size);
+        ide_write(part->disk, all_blocks[block_idx], io_buf, 1);
+    }
+
+    // 删除间接表的逻辑
+    if (is_del_indirect_table) { // 回收间接索引表所在的块
+        block_bitmap_free(part, dir_inode->indirect_block);
+        bitmap_sync(part, dir_inode->indirect_block - part->sb->data_start_lba, BLOCK_BITMAP);
+        dir_inode->indirect_block = 0;
+    }
+
+    // 同步inode节点
+    dir_inode->i_size -= dir_entry_size;
+    memset(io_buf, 0, SECTOR_SIZE << 1);
+    inode_sync(part, dir_inode, io_buf);
+
+    return true;
 }

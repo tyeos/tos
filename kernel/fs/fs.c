@@ -9,6 +9,7 @@
 #include "../../include/sys.h"
 #include "../../include/dir.h"
 #include "../../include/file.h"
+#include "../../include/inode.h"
 
 extern dir_t root_dir;
 extern file_t file_table[MAX_FILE_OPEN];
@@ -273,7 +274,7 @@ static char *path_parse(char *pathname, char *name_store) {
  * @param pathname 要计算的路径
  * @return 路径深度，说白了就是能解析出几个有效文件或目录名称，如/a/b/c/, 深度为3
  */
-uint32 path_depth_cnt(char *pathname) {
+static uint32 path_depth_cnt(char *pathname) {
     char name[MAX_FILE_NAME_LEN]; // 用于path parse的参数做路径解析
     uint32 depth = 0;
     while (pathname) {
@@ -368,8 +369,7 @@ int32 sys_open(const char *pathname, uint8 flags) {
     uint32 path_searched_depth = path_depth_cnt(searched_record.searched_path);
     if (pathname_depth != path_searched_depth) {
         // 说明并没有访问到全部的路径，某个中间目录是不存在的
-        printk("[%s] parent directory [%s] does not exist: %s\n", __FUNCTION__, searched_record.searched_path,
-               pathname);
+        printk("[%s] parent directory [%s] does not exist!\n", __FUNCTION__, searched_record.searched_path);
         dir_close(cur_part, searched_record.parent_dir);
         return -1;
     }
@@ -394,7 +394,7 @@ int32 sys_open(const char *pathname, uint8 flags) {
     if (flags & O_CREAT) {
         // 创建文件
         printk("[%s] [%s] creating ~\n", __FUNCTION__, pathname);
-        fd = file_create(searched_record.parent_dir, strrchr(searched_record.searched_path, '/') + 1);
+        fd = file_create(searched_record.parent_dir, strrchr(searched_record.searched_path, '/') + 1, flags);
         dir_close(cur_part, searched_record.parent_dir);
     } else {
         // 其余情况均为打开已存在文件 O_RDONLY, O_WRONLY, O_RDWR
@@ -482,4 +482,156 @@ int32 sys_close(int32 fd) {
     int32 ret = file_close(&file_table[_fd]);
     get_current_task()->fd_table[fd] = STD_FREE_SLOT; // 使该文件描述符位可用
     return ret;
+}
+
+
+// 删除文件（非目录）,成功返回0,失败返回-1
+int32 sys_unlink(const char *pathname) {
+
+    // 1, 确保文件存在
+    path_search_record_t searched_record;
+    memset(&searched_record, 0, sizeof(path_search_record_t));
+
+    uint32 inode_no = search_file(pathname, &searched_record);
+    if (inode_no == (uint32) ERR_IDX) {
+        printk("[%s] file not found: %s\n", __FUNCTION__, pathname);
+        dir_close(cur_part, searched_record.parent_dir);
+        return -1;
+    }
+    if (searched_record.file_type == FT_DIRECTORY) {
+        // 删除目录用 rmdir
+        printk("[%s] can't delete a dir: %s\n", __FUNCTION__, pathname);
+        dir_close(cur_part, searched_record.parent_dir);
+        STOP
+        return -1;
+    }
+
+    // 2, 检查是否在已打开文件列表（文件表）中, 打开的文件不允许删除
+
+    for (uint8 file_idx = 0; file_idx < MAX_FILE_OPEN; ++file_idx) {
+        if (file_table[file_idx].fd_inode != NULL && inode_no == file_table[file_idx].fd_inode->i_no) {
+            dir_close(cur_part, searched_record.parent_dir);
+            printk("[%s] not allowed to delete while in use: %s\n", __FUNCTION__, pathname);
+            return -1;
+        }
+    }
+
+    // 3, 删除目录项，释放inode
+    void *io_buf = kmalloc(SECTOR_SIZE << 1);
+    delete_dir_entry(cur_part, searched_record.parent_dir, inode_no, io_buf);
+    inode_release(cur_part, inode_no);
+    dir_close(cur_part, searched_record.parent_dir);
+
+    kmfree_s(io_buf, SECTOR_SIZE << 1);
+    return 0;  // 成功删除
+}
+
+// 创建目录pathname, 成功返回0, 失败返回-1
+int32 sys_mkdir(const char *pathname) {
+    // 1, 确认待创建的新目录在文件系统上不存在
+    path_search_record_t searched_record;
+    memset(&searched_record, 0, sizeof(path_search_record_t));
+    uint32 inode_no = search_file(pathname, &searched_record);
+    if (inode_no != (uint32) ERR_IDX) {
+        printk("[%s] file or directory exist: %s\n", __FUNCTION__ , pathname);
+        return -1;
+    }
+
+    // 从这里开始，后面的失败需要记录回滚
+    uint8 rollback_step = 0;
+
+    // 确保已搜索的层级是最后一级
+    uint32 pathname_depth = path_depth_cnt((char *) pathname);
+    uint32 path_searched_depth = path_depth_cnt(searched_record.searched_path);
+    if (pathname_depth != path_searched_depth) {
+        // 说明并没有访问到全部的路径，某个中间目录是不存在的
+        printk("[%s] parent directory does not exist: %s\n", __FUNCTION__, searched_record.searched_path);
+        rollback_step = 1;
+        goto rollback;
+    }
+
+    // 2, 为新目录创建inode
+
+    dir_t *parent_dir = searched_record.parent_dir;
+    char *dirname = strrchr(searched_record.searched_path, '/') + 1;
+    inode_no = inode_bitmap_alloc(cur_part); // 最后统一同步到硬盘
+    inode_t new_dir_inode;
+    inode_init(inode_no, &new_dir_inode); // 初始化i结点
+
+    // 3, 为新目录分配1个块存储该目录中的目录项
+
+    uint32 block_lba = block_bitmap_alloc(cur_part); // 最后统一同步到硬盘
+    uint32 block_bitmap_idx = block_lba - cur_part->sb->data_start_lba; // 用来记录block对应于block_bitmap中的索引
+    new_dir_inode.direct_blocks[0] = block_lba;
+
+    // 4, 在新目录中创建两个目录项“.”和“..”，这是每个目录都必须存在的两个目录项
+
+    uint32 io_buf_size = SECTOR_SIZE << 1;
+    void *io_buf = kmalloc(io_buf_size);
+    memset(io_buf, 0, io_buf_size);
+    dir_entry_t *p_de = (dir_entry_t *) io_buf;
+
+    // 初始化当前目录"."
+    p_de->i_no = inode_no;
+    p_de->f_type = FT_DIRECTORY;
+    memcpy(p_de->name, ".", 1);
+
+    // 初始化当前目录".."
+    p_de++;
+    p_de->i_no = parent_dir->inode->i_no;
+    p_de->f_type = FT_DIRECTORY;
+    memcpy(p_de->name, "..", 2);
+
+    // 将当前目录的目录项'.'和'..'写入目录
+    ide_write(cur_part->disk, new_dir_inode.direct_blocks[0], io_buf, 1);
+    new_dir_inode.i_size = cur_part->sb->dir_entry_size << 1;
+
+    // 5, 在新目录的父目录中添加新目录的目录项
+
+    dir_entry_t new_dir_entry;
+    memset(&new_dir_entry, 0, sizeof(dir_entry_t));
+    create_dir_entry(dirname, inode_no, FT_DIRECTORY, &new_dir_entry);
+
+    // 在父目录中添加自己的目录项
+    memset(io_buf, 0, io_buf_size);
+    if (!sync_dir_entry(parent_dir, &new_dir_entry, io_buf)) { // sync_dir_entry中将block_bitmap通过bitmap_sync同步到硬盘
+        printk("[%s] sync_dir_entry to disk err!\n", __FUNCTION__);
+        rollback_step = 2;
+        goto rollback;
+    }
+
+    // 6, 将以上资源的变更同步到硬盘
+
+    // 父目录的inode同步到硬盘
+    memset(io_buf, 0, io_buf_size);
+    inode_sync(cur_part, parent_dir->inode, io_buf);
+
+    // 将新创建目录的inode同步到硬盘
+    memset(io_buf, 0, io_buf_size);
+    inode_sync(cur_part, &new_dir_inode, io_buf);
+
+    // 将 块位图 和 inode位图 同步到硬盘
+    bitmap_sync(cur_part, block_bitmap_idx, BLOCK_BITMAP);
+    bitmap_sync(cur_part, inode_no, INODE_BITMAP);
+
+    // 关闭所创建目录的父目录
+    dir_close(cur_part, searched_record.parent_dir);
+
+    kmfree_s(io_buf, io_buf_size);
+    return 0;
+
+    // 7, 若中间有步骤失败，统一处理回滚时间
+    rollback:
+    switch (rollback_step) {
+        case 2:
+            inode_bitmap_free(cur_part, inode_no);
+            block_bitmap_free(cur_part, block_lba);
+            kmfree_s(io_buf, io_buf_size);
+        case 1:
+            dir_close(cur_part, searched_record.parent_dir);
+        default:
+            break;
+    }
+    return -1;
+
 }

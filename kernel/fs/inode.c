@@ -6,6 +6,7 @@
 #include "../../include/string.h"
 #include "../../include/eflags.h"
 #include "../../include/print.h"
+#include "../../include/file.h"
 
 /**
  * 获取inode所在的扇区和扇区内的偏移量
@@ -120,4 +121,71 @@ void inode_init(uint32 inode_no, inode_t *new_inode) {
     new_inode->indirect_block = 0;
     new_inode->i_open_cnts = 0;
     new_inode->write_deny = false;
+}
+
+
+/**
+ * 将硬盘上的inode清空 (把对应硬盘位置写0, 从管理上来说不清零也可以, 只是硬盘上会留脏数据, 后面谁用再直接覆盖即可)
+ * @param part inode所在分区
+ * @param inode_no inode编号
+ * @param io_buf 临时缓冲区
+ */
+static void inode_delete(partition_t *part, uint32 inode_no, void *io_buf) {
+    // 将inode表中的该inode数据清空
+    inode_position_t inode_pos;
+    inode_locate(part, inode_no, &inode_pos); // inode位置信息会存入inode_pos
+
+    char *inode_buf = (char *) io_buf;
+    uint8 sec_cnt = inode_pos.two_sec ? 2 : 1;
+    // 将原硬盘上的内容先读出来
+    ide_read(part->disk, inode_pos.sec_lba, inode_buf, sec_cnt);
+    // 将inode所在为位置清0
+    memset((inode_buf + inode_pos.off_size), 0, sizeof(inode_t));
+    // 用清0的内存数据覆盖磁盘
+    ide_write(part->disk, inode_pos.sec_lba, inode_buf, sec_cnt);
+}
+
+// 回收inode的数据块和inode本身
+void inode_release(partition_t *part, uint32 inode_no) {
+    // 1, 获取到inode资源
+    inode_t *inode_to_del = inode_open(part, inode_no);
+
+    // 2，检查清空140个数据块
+    uint8 check_block_cnt = inode_to_del->indirect_block ? 128 + 12 : 12;
+    uint32 all_block_bytes = check_block_cnt << 2;
+    uint32 *all_blocks = (uint32 *) kmalloc(all_block_bytes);
+    memset(all_blocks, 0, all_block_bytes);
+
+    // 先把直接块同步
+    for (uint8 block_idx = 0; block_idx < 12; ++block_idx) {
+        all_blocks[block_idx] = inode_to_del->direct_blocks[block_idx];
+    }
+
+    // 再把间接块同步
+    if (inode_to_del->indirect_block) {
+        ide_read(part->disk, inode_to_del->indirect_block, all_blocks + 12, 1);
+        // 先回收间接表所在的块地址, 并同步块位图
+        block_bitmap_free(part, inode_to_del->indirect_block);
+        bitmap_sync(part, inode_to_del->indirect_block - part->sb->data_start_lba, BLOCK_BITMAP);
+    }
+
+    // 释放所有块地址（不考虑目录项的情况）
+    for (uint8 block_idx = 0; block_idx < check_block_cnt; ++block_idx) {
+        if (!all_blocks[block_idx]) continue; // 没有就不管
+        // 释放块地址, 同步块位图
+        block_bitmap_free(part, all_blocks[block_idx]);
+        bitmap_sync(part, all_blocks[block_idx] - part->sb->data_start_lba, BLOCK_BITMAP);
+    }
+
+    // 2, 释放inode所在块地址，并回收位图, 清空inode
+    inode_bitmap_free(part, inode_no);
+    bitmap_sync(part, inode_no, INODE_BITMAP);
+
+    // 这里为了调试，对其清空，如果不清空后面谁用谁覆盖也可以（像上面的间接表的block和inode块数据就没有清空）
+    void *io_buf = kmalloc(1024);
+    inode_delete(part, inode_no, io_buf);
+    kmfree_s(io_buf, 1024);
+
+    // 3，关闭inode
+    inode_close(part, inode_to_del);
 }

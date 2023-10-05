@@ -50,13 +50,21 @@ int32 pcb_fd_install(int32 global_fd_idx) {
 }
 
 /**
- * 分配一个i结点
+ * 分配一个i节点
  * @param part 分区
- * @return i结点号
+ * @return i节点号
  */
 uint32 inode_bitmap_alloc(partition_t *part) {
     uint32 bit_idx = bitmap_alloc(&part->inode_bitmap);
-    return bit_idx;
+    return bit_idx; // inode_no
+}
+
+/**
+ * 释放i节点
+ * @param part 分区
+ */
+void inode_bitmap_free(partition_t *part, uint32 inode_no) {
+    bitmap_free(&part->inode_bitmap, inode_no);
 }
 
 /**
@@ -68,6 +76,14 @@ uint32 block_bitmap_alloc(partition_t *part) {
     uint32 bit_idx = bitmap_alloc(&part->block_bitmap);
     // 和inode_bitmap_malloc不同，此处返回的不是位图索引，而是具体可用的扇区地址
     return part->sb->data_start_lba + bit_idx;
+}
+
+/**
+ * 释放i节点
+ * @param part 分区
+ */
+void block_bitmap_free(partition_t *part, uint32 block_lba) {
+    bitmap_free(&part->block_bitmap, block_lba - part->sb->data_start_lba);
 }
 
 /**
@@ -105,7 +121,7 @@ void bitmap_sync(partition_t *part, uint32 bit_idx, enum bitmap_type btmp) {
  * @param flag 枚举, oflags
  * @return 成功则返回文件描述符，否则返回-1
  */
-int32 file_create(dir_t *parent_dir, char *filename) {
+int32 file_create(dir_t *parent_dir, char *filename, uint8 flag) {
 
     // 为新文件分配inode
     uint32 inode_no = inode_bitmap_alloc(cur_part);
@@ -116,7 +132,7 @@ int32 file_create(dir_t *parent_dir, char *filename) {
     int fd_idx = get_free_slot_in_global();
     file_table[fd_idx].fd_inode = new_file_inode;
     file_table[fd_idx].fd_pos = 0;
-    file_table[fd_idx].fd_flag = O_CREAT;
+    file_table[fd_idx].fd_flag = flag;
     file_table[fd_idx].fd_inode->write_deny = false;
 
     // 创建目录项
@@ -240,7 +256,7 @@ int32 file_write(file_t *file, const void *buf, uint32 count) {
         uint32 block_lba = block_bitmap_alloc(cur_part);
         bitmap_sync(cur_part, block_lba - cur_part->sb->data_start_lba, BLOCK_BITMAP);
         all_blocks[block_idx] = block_lba;
-        if (block_idx >= 12)save_indirect_block = true; // 只要间接块有新建，就需要同步到硬盘
+        if (block_idx >= 12) save_indirect_block = true; // 只要间接块有新建，就需要同步到硬盘
         else file->fd_inode->direct_blocks[block_idx] = block_lba; // 直接块同步到inode中即可，最后统一落盘
     }
     // 如果新创建了间接块，那么将创建的间接块地址同步到硬盘

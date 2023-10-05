@@ -21,4 +21,6 @@ void create_dir_entry(char *filename, uint32 inode_no, uint8 file_type, dir_entr
 
 bool sync_dir_entry(dir_t *parent_dir, dir_entry_t *p_de, void *io_buf);
 
+bool delete_dir_entry(partition_t *part, dir_t *pdir, uint32 inode_no, void *io_buf);
+
 #endif //TOS_DIR_H
