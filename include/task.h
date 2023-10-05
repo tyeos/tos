@@ -164,6 +164,7 @@ typedef struct task_t {
     char name[16];                   // 线程名称
 
     int32 fd_table[MAX_FILES_OPEN_PER_PROC];    // 文件描述符数组
+    uint32 cwd_inode_nr;                        // 进程所在的工作目录的inode编号
 
 } __attribute__((packed)) task_t;
 

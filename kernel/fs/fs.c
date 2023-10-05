@@ -735,3 +735,135 @@ int32 sys_rmdir(const char *pathname) {
 
     return close_step == 2 ? 0 : -1;
 }
+
+// 获得父目录的inode编号
+static uint32 get_parent_dir_inode_nr(uint32 child_inode_nr, void *io_buf) {
+    // 目录中的目录项".."中包括父目录inode编号，"."位于目录的第0块
+    inode_t *child_dir_inode = inode_open(cur_part, child_inode_nr);
+    uint32 block_lba = child_dir_inode->direct_blocks[0];
+    inode_close(cur_part, child_dir_inode);
+
+    // 第0个目录项是".",第1个目录项是".."
+    ide_read(cur_part->disk, block_lba, io_buf, 1);
+    dir_entry_t *dir_e = (dir_entry_t *) io_buf;
+
+    // 返回..即父目录的inode编号
+    return dir_e[1].i_no;
+}
+
+/**
+ * 在父目录中查找子目录
+ * @param p_inode_nr 父目录的inode编号
+ * @param c_inode_nr 子目录的inode编号
+ * @param path 结果缓冲区，往后追加存入查到的子目录名称
+ * @param io_buf 临时缓冲区
+ * @return 成功返回0, 失败返-1
+ */
+static int get_child_dir_name(uint32 p_inode_nr, uint32 c_inode_nr, char *path, void *io_buf) {
+
+    // 1, 先收集父目录的的全部块地址
+    inode_t *parent_dir_inode = inode_open(cur_part, p_inode_nr);
+    uint32 all_blocks[140] = {0};
+    for (uint8 block_idx = 0; block_idx < 12; ++block_idx) {
+        all_blocks[block_idx] = parent_dir_inode->direct_blocks[block_idx];
+    }
+    if (parent_dir_inode->indirect_block) {
+        ide_read(cur_part->disk, parent_dir_inode->indirect_block, all_blocks + 12, 1);
+    }
+    inode_close(cur_part, parent_dir_inode);
+
+    // 2，遍历所有块 遍历每个块中的所有目录项
+    uint32 dir_entry_size = cur_part->sb->dir_entry_size;    // 1个目录项占用的字节数
+    uint32 dir_entry_cnt = SECTOR_SIZE / dir_entry_size;     // 1个扇区中存放的目录项的最大个数（目录项不跨扇区）
+
+    dir_entry_t *p_de = (dir_entry_t *) io_buf; // 临时记录块中的每一个目录项
+    for (uint8 block_idx = 0; block_idx < 140; ++block_idx) {
+        // 先看该块是否有数据，没有就下一个
+        if (all_blocks[block_idx] == 0) continue;
+
+        memset(io_buf, 0, SECTOR_SIZE);
+        ide_read(cur_part->disk, all_blocks[block_idx], io_buf, 1);
+
+        for (uint32 dir_entry_idx = 0; dir_entry_idx < dir_entry_cnt; dir_entry_idx++) {
+            // 先确定文件可用
+            if (!p_de->f_type) continue;
+
+            // 找到了
+            if (p_de[dir_entry_idx].i_no == c_inode_nr) {
+                strcat(path, "/");
+                strcat(path, p_de[dir_entry_idx].name);
+                return 0;
+            }
+        }
+    }
+    return -1;
+}
+
+// 把当前工作目录绝对路径写入buf, size是buf的大小，失败返回NULL
+char *sys_getcwd(char *buf, uint32 size) {
+    uint32 child_inode_nr = get_current_task()->cwd_inode_nr;
+
+    // 若当前目录是根目录，直接返回'/'
+    if (child_inode_nr == 0) {
+        buf[0] = '/';
+        buf[1] = 0;
+        return buf;
+    }
+
+    void *io_buf = kmalloc(SECTOR_SIZE);
+    char full_path_reverse[MAX_PATH_LEN] = {0}; // 临时用来做全路径缓冲区
+    uint32 parent_inode_nr;
+    while (true) {
+        // 获取父目录inode编号
+        parent_inode_nr = get_parent_dir_inode_nr(child_inode_nr, io_buf);
+
+        // 从父目录中获取当前目录项名称
+        if (get_child_dir_name(parent_inode_nr, child_inode_nr, full_path_reverse, io_buf)) {
+            // 未获取到, 检查程序逻辑
+            kmfree_s(io_buf, SECTOR_SIZE);
+            printk("[%s] name err\n", __FUNCTION__);
+            STOP
+            return NULL;
+        }
+
+        // 已经找到根目录了
+        if (!parent_inode_nr) break;
+
+        // 往上再找一级，直到inode编号为0即根目录为止
+        child_inode_nr = parent_inode_nr;
+    }
+    kmfree_s(io_buf, SECTOR_SIZE);
+
+    // 因为是从子目录往父目录按层级找的，所以路径也是反着存的，即子目录在前（左）,父目录在后（右）, 所以下面反转路径
+    memset(buf, 0, size);
+    char *last_slash; // 临时用于记录字符串中最后一个斜杠地址
+    while ((last_slash = strrchr(full_path_reverse, '/'))) {
+        strcat(buf, last_slash);
+        *last_slash = EOS; // 标记字符串结尾
+    }
+    return buf;
+}
+
+// 更改(change)当前工作目录为绝对路径path, 成功则返回0, 失败返回-1
+int32 sys_chdir(const char *path) {
+    int32 ret = -1;
+
+    // 直接搜索
+    path_search_record_t searched_record;
+    memset(&searched_record, 0, sizeof(path_search_record_t));
+    uint32 inode_no = search_file(path, &searched_record);
+    if (inode_no == (uint32) ERR_IDX) {
+        printk("[%s] not found: %s\n", __FUNCTION__, path);
+    } else {
+        if (searched_record.file_type != FT_DIRECTORY) {
+            printk("[%s] not a directory: %s\n", __FUNCTION__, path);
+        } else {
+            // 找到后赋值给当前任务即可
+            get_current_task()->cwd_inode_nr = inode_no;
+            ret = 0;
+        }
+    }
+
+    dir_close(cur_part, searched_record.parent_dir);
+    return ret;
+}

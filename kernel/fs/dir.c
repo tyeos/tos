@@ -75,10 +75,8 @@ bool search_dir_entry(partition_t *part, dir_t *pdir, const char *name, dir_entr
     // 开始在所有块中查找目录项
     for (uint32 block_idx = 0; block_idx < block_cnt; ++block_idx) {
         // 先看该块是否有数据，没有就下一个
-        if (all_blocks[block_idx] == 0) {
-            block_idx++;
-            continue;
-        }
+        if (all_blocks[block_idx] == 0) continue;
+
         // 读出该块对应的扇区数据
         memset(buf, 0, SECTOR_SIZE);
         ide_read(part->disk, all_blocks[block_idx], buf, 1);

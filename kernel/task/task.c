@@ -180,6 +180,8 @@ static task_t *create_task(char *name, uint8 priority, task_func_t func, bool is
     task->fd_table[2] = stderr_no;
     for (uint8 fd_idx = 3; fd_idx < MAX_FILES_OPEN_PER_PROC; fd_idx++) task->fd_table[fd_idx] = STD_FREE_SLOT;
 
+    task->cwd_inode_nr = 0; // 默认指向根目录
+
     if (!is_kernel) {
         // 用户进程有自己的页目录表
         task->pgdir = create_virtual_page_dir();

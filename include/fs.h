@@ -256,4 +256,8 @@ int32 sys_closedir(dir_t *dir);
 
 int32 sys_rmdir(const char *pathname);
 
+char *sys_getcwd(char *buf, uint32 size);
+
+int32 sys_chdir(const char *path);
+
 #endif //TOS_FS_H

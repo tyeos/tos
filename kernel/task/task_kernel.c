@@ -37,6 +37,28 @@ void *kernel_task_ide(void *args) {
 
     char *test_dir = "/test1";
     char *test_file = "/test1/file1";
+    char buf[MAX_PATH_LEN] = {0};
+
+    {
+        int32 chdir = sys_chdir(test_dir);
+        printk("K_IDE chdir = %d\n", chdir);
+        if (chdir == -1) STOP
+
+        memset(buf, 0, MAX_PATH_LEN);
+        char *getcwd = sys_getcwd(buf, MAX_PATH_LEN);
+        printk("K_IDE getcwd = %s\n", getcwd);
+
+        chdir = sys_chdir("/");
+        printk("K_IDE chdir = %d\n", chdir);
+        if (chdir == -1) STOP
+
+        memset(buf, 0, MAX_PATH_LEN);
+        getcwd = sys_getcwd(buf, MAX_PATH_LEN);
+        printk("K_IDE getcwd = %s\n", getcwd);
+
+        STOP
+    }
+
 
     int32 mkdir = sys_mkdir(test_dir);
     printk("K_IDE mkdir = %d\n", mkdir);
@@ -53,7 +75,7 @@ void *kernel_task_ide(void *args) {
     int32 write = sys_write(fd, "hello world ~\n", 13);
     printk("K_IDE write = %d\n", write);
 
-    char buf[64] = {0};
+    memset(buf, 0, MAX_PATH_LEN);
     int32 read = sys_read(fd, buf, 8);
     printk("K_IDE read [%d]: %s\n", read, buf);
 
