@@ -160,9 +160,9 @@ typedef struct super_block_t {
 
 /* 文件类型 */
 enum file_types {
-    FT_UNKNOWN,     // 不支持的文件类型
-    FT_REGULAR,     // 普通文件
-    FT_DIRECTORY    // 目录文件
+    FT_UNKNOWN,     // 0, 不支持的文件类型
+    FT_REGULAR,     // 1, 普通文件
+    FT_DIRECTORY    // 2, 目录文件
 };
 
 /* 目录项结构 */
@@ -190,7 +190,7 @@ typedef struct inode_position_t {
 /* 目录结构 */
 typedef struct dir_t {
     inode_t *inode;
-    uint32 dir_pos;     // 记录在目录内的偏移
+    uint32 dir_pos;     // 记录目录项在目录内的偏移, 以0为起始, 该值一定为 目录项结构体占用字节大小 的倍数
     uint8 dir_buf[512]; // 目录的数据缓存
 }__attribute__((packed)) dir_t;
 
@@ -245,5 +245,15 @@ int32 sys_close(int32 fd);
 int32 sys_unlink(const char *pathname);
 
 int32 sys_mkdir(const char *pathname);
+
+dir_t *sys_opendir(const char *name);
+
+dir_entry_t *sys_readdir(dir_t *dir);
+
+void sys_rewinddir(dir_t *dir);
+
+int32 sys_closedir(dir_t *dir);
+
+int32 sys_rmdir(const char *pathname);
 
 #endif //TOS_FS_H

@@ -254,10 +254,8 @@ bool delete_dir_entry(partition_t *part, dir_t *pdir, uint32 inode_no, void *io_
     dir_entry_t *p_de = (dir_entry_t *) io_buf; // 临时记录块中的每一个目录项
     for (block_idx = 0; block_idx < 140; ++block_idx) {
         // 先看该块是否有数据，没有就下一个
-        if (all_blocks[block_idx] == 0) {
-            block_idx++;
-            continue;
-        }
+        if (all_blocks[block_idx] == 0) continue;
+
         // 先初始化准备读一块数据
         is_dir_first_block = false;
         block_dir_found_count = 0;
@@ -337,4 +335,98 @@ bool delete_dir_entry(partition_t *part, dir_t *pdir, uint32 inode_no, void *io_
     inode_sync(part, dir_inode, io_buf);
 
     return true;
+}
+
+
+/**
+ * 读取目录，成功返回1个目录项，失败返回NULL
+ * @param dir 在哪个目录读 (其中存放了目录项的偏移量)
+ * @return
+ */
+dir_entry_t *dir_read(dir_t *dir) {
+
+    // 1, 确保查找范围
+    inode_t *dir_inode = dir->inode;
+    uint32 dir_entry_size = cur_part->sb->dir_entry_size;   // 1个目录项占用的字节数
+    uint32 dir_entry_cnt = SECTOR_SIZE / dir_entry_size;    // 1个扇区中存放的目录项的最大个数（目录项不跨扇区）
+    if (dir->dir_pos % dir_entry_size || dir->dir_pos * dir_entry_size >= dir->inode->i_size) {
+        printk("[%s] pos err [0x%x / 0x%x]\n", __FUNCTION__, dir->dir_pos, dir->inode->i_size);
+        return NULL;
+    }
+
+    // 2, 先准备好所有可读取的块
+
+    uint32 all_blocks[140] = {0};
+    for (uint8 block_idx = 0; block_idx < 12; ++block_idx) {
+        all_blocks[block_idx] = dir_inode->direct_blocks[block_idx];
+    }
+    if (dir_inode->indirect_block) {
+        ide_read(cur_part->disk, dir_inode->indirect_block, all_blocks + 12, 1);
+    }
+
+    // 3, 遍历所有块 遍历每个块中的所有目录项 找到即计数 计到满足条件为止（由于块中的目录项可能不是连续的，所以需要计数查找）
+
+    uint32 cur_dir_entry_pos = 0;                       // 临时记录下一次查找的目录项的偏移
+    dir_entry_t *p_de = (dir_entry_t *) dir->dir_buf;   // 临时记录块中的每一个目录项
+    for (uint8 block_idx = 0; block_idx < 140; ++block_idx) {
+        // 先看该块是否有数据，没有就下一个
+        if (all_blocks[block_idx] == 0) {
+            block_idx++;
+            continue;
+        }
+        // 先初始化准备读一块数据
+        memset(dir->dir_buf, 0, SECTOR_SIZE);
+        ide_read(cur_part->disk, all_blocks[block_idx], dir->dir_buf, 1);
+
+        for (uint32 dir_entry_idx = 0; dir_entry_idx < dir_entry_cnt; dir_entry_idx++) {
+            // 先要确定文件类型可用
+            if (!p_de[dir_entry_idx].f_type) continue;
+
+            // 看是否已满足条件
+            if (cur_dir_entry_pos == dir->dir_pos) {
+                dir->dir_pos += dir_entry_size; // 更新位置
+                return p_de + dir_entry_idx;
+            }
+
+            // 记录后继续查找
+            cur_dir_entry_pos += dir_entry_size;
+        }
+
+        // 继续找下一个块，目录项指针初始化
+        p_de = (dir_entry_t *) dir->dir_buf;
+    }
+    return NULL; // 全找完了也没找到
+}
+
+// 判断目录是否为空
+bool dir_is_empty(dir_t *dir) {
+    // 若目录下只有.和..这两个目录项，则目录为空
+    return dir->inode->i_size == cur_part->sb->dir_entry_size << 1;
+}
+
+// 在父目录parent_dir中删除child_dir
+int32 dir_remove(dir_t *parent_dir, dir_t *child_dir) {
+    inode_t *child_dir_inode = child_dir->inode;
+
+    // 空目录只在inode->direct_blocks[0]中有扇区，其他扇区都应该为空
+    for (uint8 block_idx = 1; block_idx < 12; ++block_idx) {
+        if (child_dir_inode->direct_blocks[block_idx]) {
+            printk("[%s] unable to remove: [direct_blocks: %d] \n", __FUNCTION__, block_idx);
+            return -1;
+        }
+    }
+    if (child_dir_inode->indirect_block) {
+        printk("[%s] unable to remove: indirect_block\n", __FUNCTION__);
+        return -1;
+    }
+
+    // 在父目录中删除子目录对应的目录项
+    void *io_buf = kmalloc(SECTOR_SIZE << 1);
+    delete_dir_entry(cur_part, parent_dir, child_dir_inode->i_no, io_buf);
+
+    // 回收子目录的inode占用的扇区（内部释放位图空间）
+    inode_release(cur_part, child_dir_inode->i_no);
+
+    kmfree_s(io_buf, SECTOR_SIZE << 1);
+    return 0;
 }

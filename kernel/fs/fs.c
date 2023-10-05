@@ -533,7 +533,7 @@ int32 sys_mkdir(const char *pathname) {
     memset(&searched_record, 0, sizeof(path_search_record_t));
     uint32 inode_no = search_file(pathname, &searched_record);
     if (inode_no != (uint32) ERR_IDX) {
-        printk("[%s] file or directory exist: %s\n", __FUNCTION__ , pathname);
+        printk("[%s] file or directory exist: %s\n", __FUNCTION__, pathname);
         return -1;
     }
 
@@ -634,4 +634,104 @@ int32 sys_mkdir(const char *pathname) {
     }
     return -1;
 
+}
+
+
+// 目录打开成功后返回目录指针，失败返回NULL
+dir_t *sys_opendir(const char *name) {
+    // 检查是否是根目录
+    if (name[0] == '/' && (name[1] == 0 || name[0] == '.')) {
+        return &root_dir;
+    }
+
+    // 检查待打开的目录是否存在
+    path_search_record_t searched_record;
+    memset(&searched_record, 0, sizeof(path_search_record_t));
+    uint32 inode_no = search_file(name, &searched_record);
+    if (inode_no == (uint32) ERR_IDX) {
+        printk("[%s] directory not exist: %s\n", __FUNCTION__, searched_record.searched_path);
+        return NULL;
+    }
+
+    // 确认找到的是目录
+    if (searched_record.file_type != FT_DIRECTORY) {
+        printk("[%s] not a directory: %s\n", __FUNCTION__, name);
+        return NULL;
+    }
+
+    dir_t *ret = dir_open(cur_part, inode_no);
+    dir_close(cur_part, searched_record.parent_dir);
+    return ret;
+}
+
+// 读取目录dir的1个目录项，成功后返回其目录项地址，到目录尾时或出错时返回NULL
+dir_entry_t *sys_readdir(dir_t *dir) {
+    return dir ? dir_read(dir) : NULL;
+}
+
+// 把目录dir的指针dir_pos置0
+void sys_rewinddir(dir_t *dir) {
+    dir->dir_pos = 0;
+}
+
+// 成功关闭目录p_dir返回0,失败返回-1
+int32 sys_closedir(dir_t *dir) {
+    if (dir == NULL) return -1;
+    dir_close(cur_part, dir);
+    return 0;
+}
+
+// 删除空目录，成功时返回0,失败时返回-1
+int32 sys_rmdir(const char *pathname) {
+    // 先检查待删除的文件是否存在
+    path_search_record_t searched_record;
+    memset(&searched_record, 0, sizeof(path_search_record_t));
+    uint32 inode_no = search_file(pathname, &searched_record);
+    uint8 close_step = 0;
+    if (inode_no == (uint32) ERR_IDX) {
+        printk("[%s] not found dir: %s\n", __FUNCTION__, pathname);
+        goto to_close;
+    }
+    // 确保不是删除根目录
+    if (!inode_no) {
+        printk("[%s] cannot delete root dir: %s\n", __FUNCTION__, pathname);
+        goto to_close;
+    }
+    // 确保删除的是目录
+    if (searched_record.file_type != FT_DIRECTORY) {
+        printk("[%s] not a dir %s\n", __FUNCTION__, pathname);
+        goto to_close;
+    }
+    // 确保为空目录
+    dir_t *dir = dir_open(cur_part, inode_no);
+    if (!dir_is_empty(dir)) {
+        printk("[%s] not empty [%s: %d]\n", __FUNCTION__, pathname, dir->inode->i_size / cur_part->sb->dir_entry_size);
+        close_step = 1;
+        goto to_close;
+    }
+
+    // 删除目录
+    if (dir_remove(searched_record.parent_dir, dir)) {
+        printk("[%s] fail %s\n", __FUNCTION__, pathname);
+        close_step = 1;
+        goto to_close;
+    }
+
+    // 删除成功
+    close_step = 2;
+
+    // 回收资源
+    to_close:
+    switch (close_step) {
+        case 2:
+        case 1:
+            dir_close(cur_part, dir);
+        case 0:
+            dir_close(cur_part, searched_record.parent_dir);
+            break;
+        default:
+            break;
+    }
+
+    return close_step == 2 ? 0 : -1;
 }

@@ -23,4 +23,10 @@ bool sync_dir_entry(dir_t *parent_dir, dir_entry_t *p_de, void *io_buf);
 
 bool delete_dir_entry(partition_t *part, dir_t *pdir, uint32 inode_no, void *io_buf);
 
+dir_entry_t *dir_read(dir_t *dir);
+
+bool dir_is_empty(dir_t *dir);
+
+int32 dir_remove(dir_t *parent_dir, dir_t *child_dir);
+
 #endif //TOS_DIR_H
