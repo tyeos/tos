@@ -867,3 +867,32 @@ int32 sys_chdir(const char *path) {
     dir_close(cur_part, searched_record.parent_dir);
     return ret;
 }
+
+// 在buf中填充文件结构相关信息，成功时返回0,失败返回-1
+int32 sys_stat(const char *path, stat_t *buf) {
+    // 若直接查看根目录'/'
+    if (!strcmp(path, "/") || !strcmp(path, "/.") || !strcmp(path, "/..")) {
+        buf->st_filetype = FT_DIRECTORY;
+        buf->st_ino = 0;
+        buf->st_size = root_dir.inode->i_size;
+        return 0;
+    }
+
+    int32 ret = -1;//默认返回值
+    path_search_record_t searched_record;
+    memset(&searched_record, 0, sizeof(path_search_record_t));
+    uint32 inode_no = search_file(path, &searched_record);
+    if (inode_no == (uint32) ERR_IDX) {
+        printk("[%s] not found: %s\n", __FUNCTION__, path);
+    } else {
+        // 读inode只为为了获得文件大小
+        inode_t *obj_inode = inode_open(cur_part, inode_no);
+        buf->st_size = obj_inode->i_size;
+        inode_close(cur_part, obj_inode);
+        buf->st_filetype = searched_record.file_type;
+        buf->st_ino = inode_no;
+        ret = 0;
+    }
+    dir_close(cur_part, searched_record.parent_dir);
+    return ret;
+}

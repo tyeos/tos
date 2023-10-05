@@ -230,6 +230,13 @@ enum whence { // 从1开始递增
     SEEK_END        // offset的参照物是文件尺寸大小，即文件最后一个字节的下一个字节，也就是将读写位置指针设置为文件大小+offset
 };
 
+// 文件属性结构体
+typedef struct stat_t {
+    uint32 st_ino;      //inode编号
+    uint32 st_size;     //尺寸
+    enum file_types st_filetype;//文件类型
+} __attribute__((packed)) stat_t;
+
 void file_sys_init(chain_t *partitions);
 
 int32 sys_open(const char *pathname, uint8 flags);
@@ -259,5 +266,7 @@ int32 sys_rmdir(const char *pathname);
 char *sys_getcwd(char *buf, uint32 size);
 
 int32 sys_chdir(const char *path);
+
+int32 sys_stat(const char *path, stat_t *buf);
 
 #endif //TOS_FS_H

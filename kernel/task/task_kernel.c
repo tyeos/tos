@@ -35,9 +35,22 @@ void *kernel_task_ide(void *args) {
     printk("K_IDE start~\n");
     ide_init();
 
+    char *root_dir = "/";
     char *test_dir = "/test1";
     char *test_file = "/test1/file1";
     char buf[MAX_PATH_LEN] = {0};
+
+
+    {
+        stat_t stat;
+        sys_stat(test_dir, &stat);
+        printk("K_IDE stat [inode=%d, size=%dB, type=%d]\n", stat.st_ino, stat.st_size, stat.st_filetype);
+
+        sys_stat(root_dir, &stat);
+        printk("K_IDE stat [inode=%d, size=%dB, type=%d]\n", stat.st_ino, stat.st_size, stat.st_filetype);
+
+        STOP
+    }
 
     {
         int32 chdir = sys_chdir(test_dir);
@@ -48,7 +61,7 @@ void *kernel_task_ide(void *args) {
         char *getcwd = sys_getcwd(buf, MAX_PATH_LEN);
         printk("K_IDE getcwd = %s\n", getcwd);
 
-        chdir = sys_chdir("/");
+        chdir = sys_chdir(root_dir);
         printk("K_IDE chdir = %d\n", chdir);
         if (chdir == -1) STOP
 
