@@ -23,8 +23,10 @@ int32 file_create(dir_t *parent_dir, char *filename);
 
 int32 file_open(uint32 inode_no, uint8 flag);
 
-int32 file_close(file_t *file);
-
 int32 file_write(file_t *file, const void *buf, uint32 count);
+
+int32 file_read(file_t *file, void *buf, uint32 count);
+
+int32 file_close(file_t *file);
 
 #endif //TOS_FILE_H

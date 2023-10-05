@@ -202,6 +202,8 @@ int32 sys_open(const char *pathname, uint8 flags);
 
 int32 sys_write(int32 fd, const void *buf, uint32 count);
 
+int32 sys_read(int32 fd, void *buf, uint32 count);
+
 int32 sys_close(int32 fd);
 
 void file_sys_init(chain_t *partitions);

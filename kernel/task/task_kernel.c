@@ -34,12 +34,17 @@ void *kernel_task_ide(void *args) {
     printk("K_IDE start~\n");
     ide_init();
 
-    int32 fd = sys_open("/file1", O_CREAT);
-//    int32 fd = sys_open("/file1", O_RDWR);
+//    int32 fd = sys_open("/file1", O_CREAT);
+    int32 fd = sys_open("/file1", O_RDWR);
     printk("K_IDE open fd = %d\n", fd);
 
-    int32 cnt = sys_write(fd, "hello world ~\n", 13);
-    printk("K_IDE write cnt = %d\n", cnt);
+//    int32 cnt = sys_write(fd, "hello world ~\n", 13);
+//    printk("K_IDE write cnt = %d\n", cnt);
+
+    char buf[64] = {0};
+
+    int32 cnt = sys_read(fd, buf, 6);
+    printk("K_IDE read fd = %d, buf = %s\n", cnt, buf);
 
     int32 ret = sys_close(fd);
     printk("K_IDE close ret = %d\n", ret);

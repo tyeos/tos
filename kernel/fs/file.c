@@ -190,20 +190,6 @@ int32 file_open(uint32 inode_no, uint8 flag) {
     return pcb_fd_install(fd_idx);
 }
 
-/**
- * 关闭文件
- * @param file 关闭的文件
- * @return 成功返回0，否则返回-1
- */
-int32 file_close(file_t *file) {
-    if (file == NULL) return -1;
-    file->fd_inode->write_deny = false;
-    inode_close(cur_part, file->fd_inode);
-    file->fd_inode = NULL;
-    return 0;
-}
-
-
 // 把buf中的count个字节写入file, 成功则返回写入的字节数，失败则返回-1
 int32 file_write(file_t *file, const void *buf, uint32 count) {
     // 文件目前最大只支持 512*140=71680 字节
@@ -225,10 +211,11 @@ int32 file_write(file_t *file, const void *buf, uint32 count) {
     // 2，将需要用的块指针对应的block创建出来并关联上
 
     // 用来记录文件所有的块地址（最多支持12+128=140个块）
-    uint32 *all_blocks = (uint32 *) kmalloc(BLOCK_SIZE + 48);
-    memset(all_blocks, 0, BLOCK_SIZE + 48);
+    uint32 all_block_bytes = end_block_offset < 12 ? 48 : BLOCK_SIZE + 48;
+    uint32 *all_blocks = (uint32 *) kmalloc(all_block_bytes);
+    memset(all_blocks, 0, all_block_bytes);
     // 直接块中只把用到的同步就行
-    for (uint8 block_idx = start_block_offset; block_idx < 12; ++block_idx) {
+    for (uint8 block_idx = start_block_offset; block_idx < 12 && block_idx <= end_block_offset; ++block_idx) {
         all_blocks[block_idx] = file->fd_inode->direct_blocks[block_idx];
     }
     // 如果用到间接块，需要先保证间接块已创建，并保证同步
@@ -277,7 +264,7 @@ int32 file_write(file_t *file, const void *buf, uint32 count) {
         ide_write(cur_part->disk, all_blocks[block_idx], io_buf, 1);
         src += item_write_cnt;
 
-        printk("[%s] write data to 0x%x: [0x%x]\n", __FUNCTION__, block_idx, all_blocks[block_idx] << 9);
+        printk("[%s] to 0x%x: [0x%x]\n", __FUNCTION__, block_idx, all_blocks[block_idx] << 9);
     }
 
     file->fd_inode->i_size += count;
@@ -285,6 +272,101 @@ int32 file_write(file_t *file, const void *buf, uint32 count) {
     inode_sync(cur_part, file->fd_inode, io_buf);
 
     kmfree_s(io_buf, BLOCK_SIZE << 1);
-    kmfree_s(all_blocks, BLOCK_SIZE + 48);
+    kmfree_s(all_blocks, all_block_bytes);
+
+    printk("[%s] ok size: [0x%x -> 0x%x]\n", __FUNCTION__, file->fd_inode->i_size - count, file->fd_inode->i_size);
+
     return (int32) count;
 }
+
+
+/**
+ * 读文件
+ * @param file 读哪个文件（包括从哪个位置开始读）
+ * @param buf 读到哪里
+ * @param count 读多少
+ * @return 返回读出的字节数，若到文件尾则返回-1
+ */
+int32 file_read(file_t *file, void *buf, uint32 count) {
+    // 保证能读出数据
+    if (file->fd_pos >= file->fd_inode->i_size) {
+        printk("[%s] pos err [0x%x / 0x%x]! \n", __FUNCTION__, file->fd_pos, file->fd_inode->i_size);
+        return -1;
+    }
+
+    // 1，先要计算这次读入需要读几个块，从哪个块的哪个地方开始读，读到哪个块的哪个地方结束
+
+    uint32 start_byte_offset = file->fd_pos;                             // 从文件的哪个字节开始读
+    uint8 start_block_offset = start_byte_offset >> 9;                   // 从第几个块开始读
+    uint32 start_byte_offset_in_block = start_byte_offset % BLOCK_SIZE;  // 从开始块的第几个字节开始读
+
+    if (start_byte_offset + count > file->fd_inode->i_size) count = file->fd_inode->i_size - start_byte_offset;
+    bool read_eof = start_byte_offset + count == file->fd_inode->i_size; // 是否会读到文件的最后一个字节
+
+    uint32 end_byte_offset = start_byte_offset + count - 1;              // 读到文件的哪个字节处截止（包含该字节）
+    uint8 end_block_offset = end_byte_offset >> 9;                       // 读到第几个块结束
+    uint32 end_byte_offset_in_block = end_byte_offset % BLOCK_SIZE;      // 读到结束块的第几个字节处截止（包含该字节）
+
+    // 2，将需要用的块指针对应的block准备好
+
+    // 用来记录文件所有的块地址（最多支持12+128=140个块）
+    uint32 all_block_bytes = end_block_offset < 12 ? 48 : BLOCK_SIZE + 48;
+    uint32 *all_blocks = (uint32 *) kmalloc(all_block_bytes);
+    memset(all_blocks, 0, all_block_bytes);
+    // 直接块中只把用到的同步就行
+    for (uint8 block_idx = start_block_offset; block_idx < 12 && block_idx <= end_block_offset; ++block_idx) {
+        all_blocks[block_idx] = file->fd_inode->direct_blocks[block_idx];
+    }
+    // 如果用到间接块，需要先保证间接块已创建，并保证同步
+    if (end_block_offset >= 12) {
+        // 如果计算需要使用间接块，那它一定有值，否则就是文件大小的记录出错了，需要检查
+        if (!file->fd_inode->indirect_block) {
+            printk("[%s] record err [0x%x / 0x%x]! \n", __FUNCTION__, end_block_offset << 9, file->fd_inode->i_size);
+            STOP
+            return -1;
+        }
+        // 将数据读出
+        ide_read(cur_part->disk, file->fd_inode->indirect_block, all_blocks + 12, 1);
+    }
+
+    // 3，按块读数据即可
+
+    uint8 *dst = buf;                             // 临时存储每次循环要写入数据的地址
+    uint8 *io_buf = kmalloc(BLOCK_SIZE);           // 临时缓冲区
+    uint32 item_write_start, item_write_end, item_write_cnt; // 临时变量
+    for (uint8 block_idx = start_block_offset; block_idx <= end_block_offset; ++block_idx) {
+        // 按块读出数据
+        memset(io_buf, 0, BLOCK_SIZE);
+        ide_read(cur_part->disk, all_blocks[block_idx], io_buf, 1);
+
+        // 将读出的数据写到缓冲区
+        item_write_start = block_idx == start_block_offset ? start_byte_offset_in_block : 0;
+        item_write_end = block_idx == end_block_offset ? end_byte_offset_in_block + 1 : BLOCK_SIZE; // 这里不包含结尾字符
+        item_write_cnt = item_write_end - item_write_start; // 本次写入字节数
+
+        memcpy(dst, io_buf + item_write_start, item_write_cnt);
+        dst += item_write_cnt;
+
+        printk("[%s] from 0x%x: [0x%x]\n", __FUNCTION__, block_idx, all_blocks[block_idx] << 9);
+    }
+
+    kmfree_s(io_buf, BLOCK_SIZE);
+    kmfree_s(all_blocks, all_block_bytes);
+
+    printk("[%s] ok data: [0x%x]\n", __FUNCTION__, count);
+    return read_eof ? -1 : (int32) count;
+}
+
+/**
+ * 关闭文件
+ * @param file 关闭的文件
+ * @return 成功返回0，否则返回-1
+ */
+int32 file_close(file_t *file) {
+    if (file == NULL) return -1;
+    file->fd_inode->write_deny = false;
+    inode_close(cur_part, file->fd_inode);
+    file->fd_inode = NULL;
+    return 0;
+}
+

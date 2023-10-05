@@ -405,8 +405,7 @@ int32 sys_open(const char *pathname, uint8 flags) {
     return fd;
 }
 
-/*将buf中连续count个字节写入文件描述符fd,
-成功则返回写入的字节数，失败返回-1*/
+// 将buf中连续count个字节写入文件描述符fd, 成功则返回写入的字节数，失败返回-1
 int32 sys_write(int32 fd, const void *buf, uint32 count) {
     if (fd < 0) {
         printk("[%s] fd error: %d\n", __FUNCTION__, fd);
@@ -429,6 +428,17 @@ int32 sys_write(int32 fd, const void *buf, uint32 count) {
     printk("[%s] not allowed to write file without flag: %d\n", __FUNCTION__, wr_file->fd_flag);
     STOP
     return -1;
+}
+
+// 从文件描述符fd指向的文件中读取count个字节到buf, 若成功则返回读出的字节数，到文件尾则返回-1
+int32 sys_read(int32 fd, void *buf, uint32 count) {
+    if (fd < 0) {
+        printk("[%s] fd error: %d\n", __FUNCTION__, fd);
+        STOP
+        return -1;
+    }
+    uint32 _fd = get_current_task()->fd_table[fd];
+    return file_read(&file_table[_fd], buf, count);
 }
 
 // 关闭文件描述符fd指向的文件，成功返回0, 否则返回-1
