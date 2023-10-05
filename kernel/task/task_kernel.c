@@ -40,17 +40,14 @@ void *kernel_task_ide(void *args) {
     char *test_file = "/test1/file1";
     char buf[MAX_PATH_LEN] = {0};
 
+    sys_rmdir(test_dir);
+    int32 mkdir = sys_mkdir(test_dir);
+    printk("K_IDE mkdir = %d\n", mkdir);
+    if (mkdir == -1) return 0;
 
-    {
-        stat_t stat;
-        sys_stat(test_dir, &stat);
-        printk("K_IDE stat [inode=%d, size=%dB, type=%d]\n", stat.st_ino, stat.st_size, stat.st_filetype);
-
-        sys_stat(root_dir, &stat);
-        printk("K_IDE stat [inode=%d, size=%dB, type=%d]\n", stat.st_ino, stat.st_size, stat.st_filetype);
-
-        STOP
-    }
+    dir_t *opendir = sys_opendir(test_dir);
+    printk("K_IDE opendir = %d\n", opendir);
+    if (!opendir) return 0;
 
     {
         int32 chdir = sys_chdir(test_dir);
@@ -68,18 +65,17 @@ void *kernel_task_ide(void *args) {
         memset(buf, 0, MAX_PATH_LEN);
         getcwd = sys_getcwd(buf, MAX_PATH_LEN);
         printk("K_IDE getcwd = %s\n", getcwd);
-
-        STOP
     }
 
+    {
+        stat_t stat;
+        sys_stat(test_dir, &stat);
+        printk("K_IDE stat [inode=%d, size=%dB, type=%d]\n", stat.st_ino, stat.st_size, stat.st_filetype);
 
-    int32 mkdir = sys_mkdir(test_dir);
-    printk("K_IDE mkdir = %d\n", mkdir);
-    if (mkdir == -1) STOP
+        sys_stat(root_dir, &stat);
+        printk("K_IDE stat [inode=%d, size=%dB, type=%d]\n", stat.st_ino, stat.st_size, stat.st_filetype);
 
-    dir_t *opendir = sys_opendir(test_dir);
-    printk("K_IDE opendir = %d\n", opendir);
-    if (!opendir) STOP
+    }
 
     int32 fd = sys_open(test_file, O_CREAT | O_RDWR);
     printk("K_IDE open fd = %d\n", fd);

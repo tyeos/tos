@@ -8,10 +8,9 @@
          抬起返回的码叫断码 break code
     断码 = 通码 | 8
  */
-#include "../../include/print.h"
+
 #include "../../include/io.h"
-#include "../../include/types.h"
-#include "../../include/console.h"
+#include "../../include/shell.h"
 
 #define INV 0 // 不可见字符
 #define CODE_PRINT_SCREEN_DOWN 0xB7
@@ -307,26 +306,6 @@ void keyboard_interrupt_handler() {
         return;
     }
 
-    // 快捷键处理
-    if (ctrl_state) {
-        switch (ch) {
-            case 'f': // ctrl + f: 向下翻页 （forward）
-                scroll_up_page();
-                return;
-            case 'b': // ctrl + b: 向上翻页 （backward）
-                scroll_down_page();
-                return;
-            case 'd': // ctrl + d: 向下翻半页 （down）
-                scroll_up_rows(12); // 屏幕上卷
-                return;
-            case 'u': // ctrl + u: 向上翻半页 （up）
-                scroll_down_rows(12); // 屏幕下卷
-                return;
-            default:
-                break;
-        }
-    }
-
-    // 可见字符输出到屏幕
-    printk("%c", ch);
+    // 可见字符交由shell处理
+    keyboard_input(ctrl_state, ch);
 }
