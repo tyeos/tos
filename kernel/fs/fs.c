@@ -441,6 +441,40 @@ int32 sys_read(int32 fd, void *buf, uint32 count) {
     return file_read(&file_table[_fd], buf, count);
 }
 
+// 重置用于文件读写操作的偏移指针, 成功时返回新的偏移量，出错时返回-1
+int32 sys_seek(int32 fd, int32 offset, uint8 whence) {
+    if (fd < 0) {
+        printk("[%s] fd error: %d\n", __FUNCTION__, fd);
+        STOP
+        return -1;
+    }
+    uint32 _fd = get_current_task()->fd_table[fd];
+    file_t *pf = &file_table[_fd];
+    int32 new_pos = 0;    // 新的偏移量必须位于文件大小之内
+    int32 file_size = (int32) pf->fd_inode->i_size;
+
+    switch (whence) {
+        case SEEK_SET: // SEEK_SET新的读写位置是相对于文件开头再增加offset个位移量
+            new_pos = offset;
+            break;
+        case SEEK_CUR:// SEEK_CUR新的读写位置是相对于当前的位置增加offset个位移量
+            new_pos = (int32) pf->fd_pos + offset; // offset可正可负
+            break;
+        case SEEK_END:// SEEK_END新的读写位置是相对于文件尺寸再增加offset个位移量
+            new_pos = file_size + offset; // 此情况下，offset应该为负值
+            break;
+        default:
+            printk("[%s] whence error: %d\n", __FUNCTION__, whence);
+            STOP
+            break;
+    }
+    if (new_pos < 0 || new_pos > (file_size - 1)) {
+        return -1;
+    }
+    pf->fd_pos = new_pos;
+    return (int32) pf->fd_pos;
+}
+
 // 关闭文件描述符fd指向的文件，成功返回0, 否则返回-1
 int32 sys_close(int32 fd) {
     if (fd < 3) return -1;

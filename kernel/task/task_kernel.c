@@ -7,6 +7,7 @@
 #include "../../include/sys.h"
 #include "../../include/lock.h"
 #include "../../include/ide.h"
+#include "../../include/string.h"
 
 
 /* 模拟内核任务A */
@@ -43,8 +44,20 @@ void *kernel_task_ide(void *args) {
 
     char buf[64] = {0};
 
-    int32 cnt = sys_read(fd, buf, 6);
-    printk("K_IDE read fd = %d, buf = %s\n", cnt, buf);
+    int32 cnt = sys_read(fd, buf, 8);
+    printk("K_IDE read 1 [%d]: %s\n", cnt, buf);
+
+    memset(buf, 0, 64);
+    cnt = sys_read(fd, buf, 8);
+    printk("K_IDE read 2 [%d]: %s\n", cnt, buf);
+
+    int32 seek = sys_seek(fd, 1, SEEK_SET);
+    printk("K_IDE seek = %d\n", seek);
+
+    memset(buf, 0, 64);
+    cnt = sys_read(fd, buf, 8);
+    printk("K_IDE read 3 [%d]: %s\n", cnt, buf);
+
 
     int32 ret = sys_close(fd);
     printk("K_IDE close ret = %d\n", ret);

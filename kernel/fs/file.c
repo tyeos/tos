@@ -349,6 +349,7 @@ int32 file_read(file_t *file, void *buf, uint32 count) {
 
         printk("[%s] from 0x%x: [0x%x]\n", __FUNCTION__, block_idx, all_blocks[block_idx] << 9);
     }
+    file->fd_pos += count; // 更新偏移地址，下次可以继续读取
 
     kmfree_s(io_buf, BLOCK_SIZE);
     kmfree_s(all_blocks, all_block_bytes);

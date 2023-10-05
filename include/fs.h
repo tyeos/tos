@@ -198,11 +198,20 @@ typedef struct path_search_record_t {
     enum file_types file_type;          // 找到的是普通文件，还是目录，找不到将为未知类型（FT_UNKNOWN)
 } __attribute__((packed)) path_search_record_t;
 
+// 文件读写位置偏移量
+enum whence { // 从1开始递增
+    SEEK_SET = 1,   // offset的参照物是文件开始处，也就是将读写位置指针设置为距文件开头偏移offset个字节处
+    SEEK_CUR,       // offset的参照物是当前读写位置，也就是将读写位置指针设置为当前位置+offset
+    SEEK_END        // offset的参照物是文件尺寸大小，即文件最后一个字节的下一个字节，也就是将读写位置指针设置为文件大小+offset
+};
+
 int32 sys_open(const char *pathname, uint8 flags);
 
 int32 sys_write(int32 fd, const void *buf, uint32 count);
 
 int32 sys_read(int32 fd, void *buf, uint32 count);
+
+int32 sys_seek(int32 fd, int32 offset, uint8 whence);
 
 int32 sys_close(int32 fd);
 
