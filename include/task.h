@@ -185,6 +185,7 @@ void *idle(void *args);
 
 // 内核任务
 void *kernel_task_ide(void *args);
+void *kernel_task_shell(void *args);
 
 // test tasks
 void *kernel_task_a(void *args);

@@ -12,13 +12,17 @@
 #include "../../include/task.h"
 
 
-static enum cmd_model cur_model = OUTPUT;   // 当前命令模式
+static enum cmd_model cur_model = MODEL_OUTPUT;   // 当前命令模式
 
-static char cwd_cache[CWD_SIZE] = {0};      // 当前工作目录缓存，每次执行cd命令时会更新此内容
+static char cmd_line_writing[CMD_LEN] = {0};        // 存储正在输入的命令
+static char cmd_line_ready[CMD_LEN] = {0};          // 存储就绪的命令
+static char cmd_line_running[CMD_LEN] = {0};        // 存储正在运行的命令
 
-static char cmd_line[CMD_LEN] = {0};        // 存储当次输入的命令
-static char *cmd_pos = NULL;                // 临时记录命令字符
-static char *cmd_argv[MAX_ARG_NR];          // 存放命令行解析出的参数列表
+static char *cmd_pos = NULL;        // 临时记录正在输入的命令字符位置
+static char *cmd_argv[MAX_ARG_NR];  // 存放正在运行的命令 解析出的参数列表
+
+char cwd_cache[CWD_SIZE] = {0};     // 当前工作目录缓存，每次执行cd命令时会更新此内容
+
 
 /**
  * 将字符串以指定分隔符分割
@@ -27,10 +31,10 @@ static char *cmd_argv[MAX_ARG_NR];          // 存放命令行解析出的参数
  * @param token 分隔符
  * @return 解析出的参数数量
  */
-static int32 cmd_parse(char *cmd_str, char **argv, char token) {
-    for (int arg_idx = 0; arg_idx < MAX_ARG_NR; ++arg_idx) argv[arg_idx] = NULL; // 先将将结果集置空
+static uint8 cmd_parse(char *cmd_str, char **argv, char token) {
+    for (uint8 arg_idx = 0; arg_idx < MAX_ARG_NR; ++arg_idx) argv[arg_idx] = NULL; // 先将将结果集置空
     char *next = cmd_str;                       // 存放扫描的字符
-    int32 argc = 0;                             // 扫描出的参数个数
+    uint8 argc = 0;                             // 扫描出的参数个数
     while (*next) {                             // 外层循环处理整个命令行
         while (*next == token) next++;          // 读参数前先去除无效字符
         if (*next == EOS) break;                // 读到最后返回
@@ -50,38 +54,46 @@ static void print_prompt() {
 
 // 切换命令模式
 static void switch_cmd_model() {
-    cur_model = cur_model == OUTPUT ? CMD : OUTPUT;
-    if (cur_model == CMD) {
+    cur_model = cur_model == MODEL_OUTPUT ? MODEL_CMD : MODEL_OUTPUT;
+    if (cur_model == MODEL_CMD) {
         printk("\n--- open cmd ---\n");
 
-        // 默认指向根目录
+        // 如果初始没有值，默认指向根目录
         if (!cwd_cache[0]) cwd_cache[0] = '/';
 
         // 清空命令行缓存
-        memset(cmd_line, 0, CWD_SIZE);
-        cmd_pos = cmd_line;
+        memset(cmd_line_writing, 0, CWD_SIZE);
+        cmd_pos = cmd_line_writing;
 
         // 输出提示符
         print_prompt();
     } else {
         printk("\n--- close cmd ---\n");
     }
-
 }
 
-static void exec_cmd() {
-    // 解析命令
-    printk("\n");
-    int32 cmd_argc = cmd_parse(cmd_line, cmd_argv, ' ');
-    if (cmd_argc && !strcmp(cmd_argv[0], "ps")) {
-        sys_ps();
-    } else {
-        printk("[%s] not supported: %s\n", __FUNCTION__, cmd_line);
+static void ready_cmd() {
+    // 如果没输入任何内容，换行输出命令行提示符即可
+    if (!cmd_line_writing[0]) {
+        print_prompt();
+        return;
     }
-    // 还原命令行窗口
-    memset(cmd_line, 0, CWD_SIZE);
-    cmd_pos = cmd_line;
-    print_prompt();
+
+    // 如果上一条命令还没执行完，这行命令就暂不执行
+    if (cmd_line_ready[0]) {
+        // 输出提示，并重新将命令输出到屏幕
+        printk("[%s] last task is currently executing ~\n", __FUNCTION__);
+        print_prompt();
+        printk("%s", cmd_line_writing);
+        return;
+    }
+
+    // 将命令复制到就绪队列
+    memcpy(cmd_line_ready, cmd_line_writing, CMD_LEN);
+
+    // 还原命令行窗口, 等待处理结果
+    memset(cmd_line_writing, 0, CWD_SIZE);
+    cmd_pos = cmd_line_writing;
 }
 
 static void input_cmd_char(char ch) {
@@ -93,11 +105,11 @@ static void input_cmd_char(char ch) {
             printk("%c", ch);
             // 执行指令
             *cmd_pos = EOS;
-            exec_cmd();
+            ready_cmd();
             return;
         case '\b':
             // 删到第一个字符就别删了
-            if (cmd_pos == cmd_line) return;
+            if (cmd_pos == cmd_line_writing) return;
             // 将字符从屏幕中删除
             printk("%c", ch);
             *cmd_pos = EOS;
@@ -108,7 +120,7 @@ static void input_cmd_char(char ch) {
     }
 
     // 命令行字符数不可超出限制
-    if (cmd_pos >= cmd_line + CMD_LEN) return;
+    if (cmd_pos >= cmd_line_writing + CMD_LEN) return;
 
     // 将字符输出到屏幕
     printk("%c", ch);
@@ -146,11 +158,31 @@ void keyboard_input(bool ctl, char ch) {
         return;
     }
 
-    // 输出模式不向屏幕输出字符
-    if (cur_model == OUTPUT) {
-        return;
-    }
+    // 非命令模式不向屏幕输出字符
+    if (cur_model != MODEL_CMD) return;
 
     // 命令字符
     input_cmd_char(ch);
+}
+
+void check_exec_shell() {
+    // 如果没有就绪的命令，释放控制权，继续等待
+    if (!cmd_line_ready[0]) return;
+
+    // 取出命令
+    memcpy(cmd_line_running, cmd_line_ready, CMD_LEN);
+    memset(cmd_line_ready, 0, CMD_LEN);
+
+    // 正常解析执行命令
+    printk("\n");
+    if (cmd_line_running[0]) {
+        uint8 cmd_argc = cmd_parse(cmd_line_running, cmd_argv, ' ');
+        if (!buildin_cmd(cmd_argc, cmd_argv)) {
+            printk("[%s] not supported: %s\n", __FUNCTION__, cmd_line_running);
+        }
+    }
+
+    // 处理完成，输出命令行提示, 如果已经输出了一部分命令，则追加其后
+    print_prompt();
+    if (cmd_line_writing[0]) printk("%s", cmd_line_writing);
 }

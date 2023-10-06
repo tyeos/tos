@@ -8,6 +8,7 @@
 #include "../../include/lock.h"
 #include "../../include/ide.h"
 #include "../../include/string.h"
+#include "../../include/shell.h"
 
 
 /* 模拟内核任务A */
@@ -28,6 +29,13 @@ void *kernel_task_b(void *args) {
     return NULL;
 }
 
+_Noreturn void *kernel_task_shell(void *args) {
+    while (true) {
+        check_exec_shell();
+        HLT // 执行完一次即释放其控制权
+    }
+}
+
 /*
  * 处理硬盘初始化
  */
@@ -40,68 +48,73 @@ void *kernel_task_ide(void *args) {
     char *test_file = "/test1/file1";
     char buf[MAX_PATH_LEN] = {0};
 
-    sys_rmdir(test_dir);
     int32 mkdir = sys_mkdir(test_dir);
     printk("K_IDE mkdir = %d\n", mkdir);
     if (mkdir == -1) return 0;
+
 
     dir_t *opendir = sys_opendir(test_dir);
     printk("K_IDE opendir = %d\n", opendir);
     if (!opendir) return 0;
 
-    {
-        int32 chdir = sys_chdir(test_dir);
-        printk("K_IDE chdir = %d\n", chdir);
-        if (chdir == -1) STOP
-
-        memset(buf, 0, MAX_PATH_LEN);
-        char *getcwd = sys_getcwd(buf, MAX_PATH_LEN);
-        printk("K_IDE getcwd = %s\n", getcwd);
-
-        chdir = sys_chdir(root_dir);
-        printk("K_IDE chdir = %d\n", chdir);
-        if (chdir == -1) STOP
-
-        memset(buf, 0, MAX_PATH_LEN);
-        getcwd = sys_getcwd(buf, MAX_PATH_LEN);
-        printk("K_IDE getcwd = %s\n", getcwd);
-    }
-
-    {
-        stat_t stat;
-        sys_stat(test_dir, &stat);
-        printk("K_IDE stat [inode=%d, size=%dB, type=%d]\n", stat.st_ino, stat.st_size, stat.st_filetype);
-
-        sys_stat(root_dir, &stat);
-        printk("K_IDE stat [inode=%d, size=%dB, type=%d]\n", stat.st_ino, stat.st_size, stat.st_filetype);
-
-    }
-
-    int32 fd = sys_open(test_file, O_CREAT | O_RDWR);
+    int32 fd = sys_open(test_file, O_CREAT);
     printk("K_IDE open fd = %d\n", fd);
-    if (fd == -1) STOP
+    if (fd == -1) return 0;
 
-    int32 write = sys_write(fd, "hello world ~\n", 13);
-    printk("K_IDE write = %d\n", write);
 
-    memset(buf, 0, MAX_PATH_LEN);
-    int32 read = sys_read(fd, buf, 8);
-    printk("K_IDE read [%d]: %s\n", read, buf);
-
-    dir_entry_t *readdir = sys_readdir(opendir);
-    printk("K_IDE readdir: %s\n", readdir->name);
-
-    int32 close = sys_close(fd);
-    printk("K_IDE close = %d\n", close);
-
-    int32 unlink = sys_unlink(test_file);
-    printk("K_IDE unlink = %d\n", unlink);
-
-    int32 closedir = sys_closedir(opendir);
-    printk("K_IDE closedir = %d\n", closedir);
-
-    int32 rmdir = sys_rmdir(test_dir);
-    printk("K_IDE rmdir = %d\n", rmdir);
+//    {
+//        int32 chdir = sys_chdir(test_dir);
+//        printk("K_IDE chdir = %d\n", chdir);
+//        if (chdir == -1) STOP
+//
+//        memset(buf, 0, MAX_PATH_LEN);
+//        char *getcwd = sys_getcwd(buf, MAX_PATH_LEN);
+//        printk("K_IDE getcwd = %s\n", getcwd);
+//
+//        chdir = sys_chdir(root_dir);
+//        printk("K_IDE chdir = %d\n", chdir);
+//        if (chdir == -1) STOP
+//
+//        memset(buf, 0, MAX_PATH_LEN);
+//        getcwd = sys_getcwd(buf, MAX_PATH_LEN);
+//        printk("K_IDE getcwd = %s\n", getcwd);
+//    }
+//
+//    {
+//        stat_t stat;
+//        sys_stat(test_dir, &stat);
+//        printk("K_IDE stat [inode=%d, size=%dB, type=%d]\n", stat.st_ino, stat.st_size, stat.st_filetype);
+//
+//        sys_stat(root_dir, &stat);
+//        printk("K_IDE stat [inode=%d, size=%dB, type=%d]\n", stat.st_ino, stat.st_size, stat.st_filetype);
+//
+//    }
+//
+//    int32 fd = sys_open(test_file, O_CREAT | O_RDWR);
+//    printk("K_IDE open fd = %d\n", fd);
+//    if (fd == -1) STOP
+//
+//    int32 write = sys_write(fd, "hello world ~\n", 13);
+//    printk("K_IDE write = %d\n", write);
+//
+//    memset(buf, 0, MAX_PATH_LEN);
+//    int32 read = sys_read(fd, buf, 8);
+//    printk("K_IDE read [%d]: %s\n", read, buf);
+//
+//    dir_entry_t *readdir = sys_readdir(opendir);
+//    printk("K_IDE readdir: %s\n", readdir->name);
+//
+//    int32 close = sys_close(fd);
+//    printk("K_IDE close = %d\n", close);
+//
+//    int32 unlink = sys_unlink(test_file);
+//    printk("K_IDE unlink = %d\n", unlink);
+//
+//    int32 closedir = sys_closedir(opendir);
+//    printk("K_IDE closedir = %d\n", closedir);
+//
+//    int32 rmdir = sys_rmdir(test_dir);
+//    printk("K_IDE rmdir = %d\n", rmdir);
 
     printk("K_IDE end~\n");
     SLEEP(100)

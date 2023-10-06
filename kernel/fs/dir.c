@@ -347,8 +347,8 @@ dir_entry_t *dir_read(dir_t *dir) {
     inode_t *dir_inode = dir->inode;
     uint32 dir_entry_size = cur_part->sb->dir_entry_size;   // 1个目录项占用的字节数
     uint32 dir_entry_cnt = SECTOR_SIZE / dir_entry_size;    // 1个扇区中存放的目录项的最大个数（目录项不跨扇区）
-    if (dir->dir_pos % dir_entry_size || dir->dir_pos * dir_entry_size >= dir->inode->i_size) {
-        printk("[%s] pos err [0x%x / 0x%x]\n", __FUNCTION__, dir->dir_pos, dir->inode->i_size);
+    if (dir->dir_pos % dir_entry_size || dir->dir_pos + dir_entry_size > dir->inode->i_size) {
+        printk("[%s] pos err [0x%x / 0x%x] 0x%x\n", __FUNCTION__, dir->dir_pos, dir->inode->i_size, dir_entry_size);
         return NULL;
     }
 

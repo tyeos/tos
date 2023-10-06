@@ -12,10 +12,14 @@
 #define CWD_SIZE 64     // 当前工作目录缓存大小
 
 enum cmd_model {
-    OUTPUT, // 常规输出模式
-    CMD     // 输入命令模式
+    MODEL_OUTPUT, // 常规输出模式
+    MODEL_CMD     // 输入命令模式
 };
 
+void check_exec_shell();
+
 void keyboard_input(bool ctl, char c);
+
+bool buildin_cmd(uint8 argc, char **argv);
 
 #endif //TOS_SHELL_H

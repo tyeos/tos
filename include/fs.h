@@ -239,6 +239,8 @@ typedef struct stat_t {
 
 void file_sys_init(chain_t *partitions);
 
+char *path_parse(char *pathname, char *name_store);
+
 int32 sys_open(const char *pathname, uint8 flags);
 
 int32 sys_write(int32 fd, const void *buf, uint32 count);

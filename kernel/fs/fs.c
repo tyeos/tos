@@ -258,10 +258,10 @@ void file_sys_init(chain_t *partitions) {
  * 解析最上层路径的名称
  * @param pathname 要解析的路径，如"/a/b/c"
  * @param name_store 存于存储最上层路径的名称，如"/a/b/c"最终会存入"a"
- * @return 未解析的路径，，如"/a/b/c"最终会返回"/b/c"
+ * @return 未解析的路径，如"/a/b/c"最终会返回"/b/c"
  */
 // 将最上层路径名称解析出来
-static char *path_parse(char *pathname, char *name_store) {
+char *path_parse(char *pathname, char *name_store) {
     // 先处理最前面的斜杠, 包括连续的, 如"///a/b"会处理成"a/b"
     if (pathname[0] == '/') while (*(++pathname) == '/');
     // 开始一般的路径解析

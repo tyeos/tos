@@ -11,6 +11,7 @@
  */
 _Noreturn void *idle(void *args) {
     create_kernel_thread("K_IDE", 2, kernel_task_ide);
+    create_kernel_thread("K_SHELL", 2, kernel_task_shell);
 //    create_kernel_thread("K_A", 2, kernel_task_a);
 //    create_kernel_thread("K_B", 1, kernel_task_b);
 //    create_user_process("U_PA", 1, user_task_a);
