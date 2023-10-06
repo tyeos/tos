@@ -7,6 +7,8 @@
 
 #include "../include/types.h"
 
+int skip_atoi(const char **s);
+
 int printk(const char *fmt, ...);
 
 int sprintfk(char *dest, const char *fmt, ...);

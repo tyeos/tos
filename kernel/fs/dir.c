@@ -262,7 +262,7 @@ bool delete_dir_entry(partition_t *part, dir_t *pdir, uint32 inode_no, void *io_
 
         for (uint32 dir_entry_idx = 0; dir_entry_idx < dir_entry_cnt; dir_entry_idx++) {
             // 先要确定文件类型
-            if (p_de->f_type == FT_UNKNOWN) continue;
+            if (p_de[dir_entry_idx].f_type == FT_UNKNOWN) continue;
 
             // 再看是否是 "." 和 ".."
             if (!strcmp(p_de[dir_entry_idx].name, "..")) continue;
@@ -399,6 +399,11 @@ dir_entry_t *dir_read(dir_t *dir) {
 // 判断目录是否为空
 bool dir_is_empty(dir_t *dir) {
     // 若目录下只有.和..这两个目录项，则目录为空
+    if (dir->inode->i_size < cur_part->sb->dir_entry_size << 1) {
+        // 或者是一个目录项都没有，那就是出问题的目录，需要检查程序逻辑
+        printk("[%s] this dir is faulty!\n", __FUNCTION__);
+        return false;
+    }
     return dir->inode->i_size == cur_part->sb->dir_entry_size << 1;
 }
 
@@ -420,7 +425,11 @@ int32 dir_remove(dir_t *parent_dir, dir_t *child_dir) {
 
     // 在父目录中删除子目录对应的目录项
     void *io_buf = kmalloc(SECTOR_SIZE << 1);
-    delete_dir_entry(cur_part, parent_dir, child_dir_inode->i_no, io_buf);
+    bool ok = delete_dir_entry(cur_part, parent_dir, child_dir_inode->i_no, io_buf);
+    if (!ok) { // 目录项删除失败
+        printk("[%s] dir entry del fail\n", __FUNCTION__);
+        return -1;
+    }
 
     // 回收子目录的inode占用的扇区（内部释放位图空间）
     inode_release(cur_part, child_dir_inode->i_no);

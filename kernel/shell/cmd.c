@@ -17,7 +17,11 @@ extern char cwd_cache[CWD_SIZE];
 // 用于临时存储各业务场景的绝对路径
 static char final_path[MAX_PATH_LEN];
 
-// pwd命令的内建函数
+/*
+ * ps命令的内建函数
+ * 使用方式：
+ *      ps
+ */
 static void buildin_ps(uint32 argc, char **argv) {
     if (argc != 1) {
         printk("[%s] unknown operation!\n", __FUNCTION__);
@@ -61,6 +65,7 @@ static void wash_path(char *old_abs_path, char *new_abs_path) {
         // 其他情况，正常拼接
         if (new_abs_path[1]) strcat(new_abs_path, "/"); // 如果不是第一级, 先拼个斜杠
         strcat(new_abs_path, name); // 拼目录名
+        memset(name, 0, MAX_FILE_NAME_LEN);
     }
 }
 
@@ -82,7 +87,11 @@ static void make_clear_abs_path(char *path, char *new_abs_path) {
     wash_path(abs_path, new_abs_path);
 }
 
-// ls命令的内建函数
+/*
+ * ls命令的内建函数
+ * 使用方式：
+ *      ls {-h |-l} {dir_path | file_path}
+ */
 static void buildin_ls(uint32 argc, char **argv) {
     char *pathname = NULL;  // 要查看的路径
     bool long_info = false; // 是否输出长信息
@@ -200,7 +209,11 @@ static void buildin_ls(uint32 argc, char **argv) {
     sys_closedir(dir); // 完成后关闭目录
 }
 
-// pwd命令的内建函数
+/*
+ * pwd命令的内建函数
+ * 使用方式：
+ *      pwd
+ */
 void buildin_pwd(uint32 argc, char **argv) {
     if (argc != 1) {
         printk("[%s] unknown operation!\n", __FUNCTION__);
@@ -215,7 +228,11 @@ void buildin_pwd(uint32 argc, char **argv) {
     printk("%s\n", final_path);
 }
 
-// cd命令的内建函数
+/*
+ * cd命令的内建函数
+ * 使用方式：
+ *      cd {dir_path}
+ */
 void buildin_cd(uint32 argc, char **argv) {
     if (argc > 2) {
         printk("[%s] unknown operation!\n", __FUNCTION__);
@@ -241,6 +258,202 @@ void buildin_cd(uint32 argc, char **argv) {
     strcpy(cwd_cache, final_path);
 }
 
+/*
+ * mkdir命令的内建函数
+ * 使用方式：
+ *      mkdir [dir_path]
+ */
+void buildin_mkdir(uint32 argc, char **argv) {
+    if (argc != 2 || !argv[1]) {
+        printk("[%s] unknown operation!\n", __FUNCTION__);
+        return;
+    }
+
+    // 处理为绝对路径
+    make_clear_abs_path(argv[1], final_path);
+
+    // 创建目录
+    if (sys_mkdir(final_path) == -1) {
+        printk("[%s] err !\n", __FUNCTION__);
+        return;
+    }
+
+    printk("[%s] ok: %s\n", __FUNCTION__, final_path);
+}
+
+/*
+ * rmdir命令的内建函数
+ * 使用方式：
+ *      rmdir [dir_path]
+ */
+void buildin_rmdir(uint32 argc, char **argv) {
+    if (argc != 2 || !argv[1]) {
+        printk("[%s] unknown operation!\n", __FUNCTION__);
+        return;
+    }
+
+    // 处理为绝对路径
+    make_clear_abs_path(argv[1], final_path);
+
+    // 删除目录
+    if (sys_rmdir(final_path) == -1) {
+        printk("[%s] err !\n", __FUNCTION__);
+        return;
+    }
+
+    printk("[%s] ok: %s\n", __FUNCTION__, final_path);
+}
+
+/*
+ * touch命令的内建函数
+ * 使用方式：
+ *      touch [file_path]
+ */
+void buildin_touch(uint32 argc, char **argv) {
+    if (argc != 2 || !argv[1]) {
+        printk("[%s] unknown operation!\n", __FUNCTION__);
+        return;
+    }
+
+    // 处理为绝对路径
+    make_clear_abs_path(argv[1], final_path);
+
+    // 创建文件
+    int32 fd = sys_open(final_path, O_CREAT);
+    if (fd == -1) {
+        printk("[%s] err !\n", __FUNCTION__);
+        return;
+    }
+
+    // 关闭文件
+    if (sys_close(fd) == -1) {
+        printk("[%s] close err !\n", __FUNCTION__);
+        return;
+    }
+
+    printk("[%s] ok: %s\n", __FUNCTION__, final_path);
+}
+
+
+/*
+ * rm命令的内建函数
+ * 使用方式：
+ *      rm [file_path]
+ */
+void buildin_rm(uint32 argc, char **argv) {
+    if (argc != 2 || !argv[1]) {
+        printk("[%s] unknown operation!\n", __FUNCTION__);
+        return;
+    }
+
+    // 处理为绝对路径
+    make_clear_abs_path(argv[1], final_path);
+
+    // 删除文件
+    if (sys_unlink(final_path) == -1) {
+        printk("[%s] err !\n", __FUNCTION__);
+        return;
+    }
+
+    printk("[%s] ok: %s\n", __FUNCTION__, final_path);
+}
+
+/*
+ * write命令的内建函数
+ * 使用方式：
+ *      write [file_path] [content]
+ */
+void buildin_write(uint32 argc, char **argv) {
+    if (argc != 3 || !argv[1]) {
+        printk("[%s] unknown operation!\n", __FUNCTION__);
+        return;
+    }
+
+    uint32 content_size = strlen(argv[2]);
+    if (!content_size) {
+        printk("[%s] no input content!\n", __FUNCTION__);
+        return;
+    }
+
+    // 处理为绝对路径
+    make_clear_abs_path(argv[1], final_path);
+
+    // 打开文件
+    int32 fd = sys_open(final_path, O_RDWR);
+    if (fd == -1) {
+        printk("[%s] open err !\n", __FUNCTION__);
+        return;
+    }
+
+    // 写入内容（追加写）
+    int32 cnt = sys_write(fd, argv[2], content_size);
+    if (cnt == -1) {
+        printk("[%s] err !\n", __FUNCTION__);
+        sys_close(fd);
+        return;
+    }
+
+    // 关闭文件
+    if (sys_close(fd) == -1) {
+        printk("[%s] close err !\n", __FUNCTION__);
+        return;
+    }
+
+    printk("[%s] ok: %d -> %s\n", __FUNCTION__, cnt, final_path);
+}
+
+
+/*
+ * read命令的内建函数
+ * 使用方式：
+ *      read [file_path] [read_size]
+ */
+void buildin_read(uint32 argc, char **argv) {
+    if (argc != 3 || !argv[1]) {
+        printk("[%s] unknown operation!\n", __FUNCTION__);
+        return;
+    }
+
+    const char *size_str = argv[2];
+    int read_size = skip_atoi(&size_str);
+    uint32 buf_size = read_size + 1; // 最后要有个0结束符
+    if (read_size <= 0 || buf_size > PAGE_SIZE) {
+        printk("[%s] size illegal!\n", __FUNCTION__);
+        return;
+    }
+
+    // 处理为绝对路径
+    make_clear_abs_path(argv[1], final_path);
+
+    // 打开文件
+    int32 fd = sys_open(final_path, O_RDONLY);
+    if (fd == -1) {
+        printk("[%s] open err !\n", __FUNCTION__);
+        return;
+    }
+
+    if (sys_seek(fd, 0, SEEK_SET) == -1) {
+        printk("[%s] seek err !\n", __FUNCTION__);
+        sys_close(fd);
+        return;
+    }
+
+    // 读取文件内容
+    void *buf = kmalloc(buf_size);
+    memset(buf, 0, buf_size);
+    int cnt = sys_read(fd, buf, read_size);
+
+    // 关闭文件
+    if (sys_close(fd) == -1) {
+        printk("[%s] close err !\n", __FUNCTION__);
+        kmfree_s(buf, buf_size);
+        return;
+    }
+
+    printk("[%s] ok [%d] -> %s\n", __FUNCTION__, cnt, buf);
+    kmfree_s(buf, buf_size);
+}
+
 // 内建命令
 bool buildin_cmd(uint8 argc, char **argv) {
     if (!argc) return false;
@@ -262,6 +475,36 @@ bool buildin_cmd(uint8 argc, char **argv) {
 
     if (!strcmp(argv[0], "cd")) {
         buildin_cd(argc, argv);
+        return true;
+    }
+
+    if (!strcmp(argv[0], "mkdir")) {
+        buildin_mkdir(argc, argv);
+        return true;
+    }
+
+    if (!strcmp(argv[0], "rmdir")) {
+        buildin_rmdir(argc, argv);
+        return true;
+    }
+
+    if (!strcmp(argv[0], "touch")) {
+        buildin_touch(argc, argv);
+        return true;
+    }
+
+    if (!strcmp(argv[0], "rm")) {
+        buildin_rm(argc, argv);
+        return true;
+    }
+
+    if (!strcmp(argv[0], "write")) {
+        buildin_write(argc, argv);
+        return true;
+    }
+
+    if (!strcmp(argv[0], "read")) {
+        buildin_read(argc, argv);
         return true;
     }
 

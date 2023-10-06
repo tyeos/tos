@@ -11,7 +11,7 @@
 
 // 将字符数字转换成整数
 // 输入：数字串的二级指针
-static int skip_atoi(const char **s) {
+int skip_atoi(const char **s) {
     int i = 0;
     while (is_digit(**s))
         i = i * 10 + *((*s)++) - '0';

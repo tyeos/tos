@@ -316,20 +316,25 @@ static uint32 search_file(const char *pathname, path_search_record_t *searched_r
         // 在目录中查找目录项，若找不到，则返回-1（这时候parent_dir暂不关闭，因为下一步一般就是创建）
         if (!search_dir_entry(cur_part, searched_record->parent_dir, name, &dir_e)) return ERR_IDX;
 
+        if (!dir_e.f_type) return ERR_IDX; // 未知类型，相当于不存在
+
         // 如果找到了普通文件，就直接返回
         if (FT_REGULAR == dir_e.f_type) {
             searched_record->file_type = FT_REGULAR;
             return dir_e.i_no;
         }
 
-        // 否则就是目录（暂不考虑未知类型）
-        dir_close(cur_part, searched_record->parent_dir);                                 // 关闭已查找的目录
-        searched_record->parent_dir = dir_open(cur_part, dir_e.i_no); // 更新父目录到当前目录
+        // 否则就是目录，准备继续找下级
 
         // 如果没有可解析的下级目录(或普通文件)了，那要的就是这个目录，到此结束
         if (!sub_path) break; // 这里考虑目录最后可能是以斜杠结尾，所以在最后统一返回
+
         // 还没解析完，就继续找
+        dir_close(cur_part, searched_record->parent_dir);                  // 关闭已查找的目录
+        searched_record->parent_dir = dir_open(cur_part, dir_e.i_no); // 更新父目录到当前目录
         memset(name, 0, MAX_FILE_NAME_LEN);
+
+        // 注意，如果最后是以斜杠结尾，那么记录中存储的父目录为是最后这个斜杠之前的目录，所以外面调用时要考虑好场景
     }
 
     // 到这里就说明是目录了，没找到文件
@@ -500,9 +505,8 @@ int32 sys_unlink(const char *pathname) {
     }
     if (searched_record.file_type == FT_DIRECTORY) {
         // 删除目录用 rmdir
-        printk("[%s] can't delete a dir: %s\n", __FUNCTION__, pathname);
+        printk("[%s] please use rmdir delete directory\n", __FUNCTION__);
         dir_close(cur_part, searched_record.parent_dir);
-        STOP
         return -1;
     }
 
@@ -786,7 +790,7 @@ static int get_child_dir_name(uint32 p_inode_nr, uint32 c_inode_nr, char *path, 
 
         for (uint32 dir_entry_idx = 0; dir_entry_idx < dir_entry_cnt; dir_entry_idx++) {
             // 先确定文件可用
-            if (!p_de->f_type) continue;
+            if (!p_de[dir_entry_idx].f_type) continue;
 
             // 找到了
             if (p_de[dir_entry_idx].i_no == c_inode_nr) {
