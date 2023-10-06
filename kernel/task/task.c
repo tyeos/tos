@@ -158,6 +158,35 @@ task_t *get_current_task() {
     return current_task;
 }
 
+// 打印任务列表
+void sys_ps() {
+    // 每列16个字符，80字符正好5列
+    char *ps_title = "PID             NAME            STAT            TICKS           PRIORITY\n";
+    printk(ps_title);
+    task_t *task;
+    for (chain_elem_t *elem = chain_read_first(&tasks); elem; elem = chain_read_next(&tasks, elem)) {
+        task = (task_t *) elem->value;
+        printk("%-*d", 16, task->pid);
+        printk("%-*s", 16, task->name);
+        switch (task->state) {
+            case TASK_RUNNING:
+                printk("%-*s", 16, "running");
+                break;
+            case TASK_READY:
+                printk("%-*s", 16, "ready");
+                break;
+            case TASK_BLOCKED:
+                printk("%-*s", 16, "blocked");
+                break;
+            default:
+                printk("%-*s", 16, "died");
+                break;
+        }
+        printk("%-*d", 16, task->ticks);
+        printk("%-*d", 16, task->priority);
+    }
+}
+
 static task_t *create_task(char *name, uint8 priority, task_func_t func, bool is_kernel) {
     // 创建任务
     task_t *task = alloc_kernel_page();
