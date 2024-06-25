@@ -11,10 +11,10 @@ floppya: type=1_44
 # no floppyb
 ata0: enabled=true, ioaddr1=0x1f0, ioaddr2=0x3f0, irq=14
 ata0-master: type=disk, path="build/hd.img", mode=flat
-ata0-slave: type=disk, path="build/hd1.img", mode=flat
+ata0-slave: type=disk, path="build_hdx/hd1.img", mode=flat
 ata1: enabled=true, ioaddr1=0x170, ioaddr2=0x370, irq=15
-ata1-master: type=disk, path="build/hd2.img", mode=flat
-ata1-slave: type=disk, path="build/hd3.img", mode=flat
+ata1-master: type=disk, path="build_hdx/hd2.img", mode=flat
+ata1-slave: type=disk, path="build_hdx/hd3.img", mode=flat
 ata2: enabled=false
 ata3: enabled=false
 optromimage1: file=none
